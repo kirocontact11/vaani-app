@@ -163,7 +163,10 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="how" className="bg-[#EAF2EE] px-4 py-6 sm:px-12 sm:py-8">
+      <section
+        id="how"
+        className="scroll-mt-[90px] bg-[#DAEAE4] px-4 py-6 sm:scroll-mt-[130px] sm:px-12 sm:py-8"
+      >
         <div className="mx-auto max-w-[1100px] text-center">
           <h2 className="font-heading text-[clamp(30px,3.6vw,46px)] font-medium leading-[1.1] tracking-[-0.02em]">
             Three simple steps
@@ -203,7 +206,10 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="about" className="bg-base px-4 py-6 sm:px-12 sm:py-8">
+      <section
+        id="about"
+        className="scroll-mt-[90px] bg-[#E7E1F1] px-4 py-6 sm:scroll-mt-[130px] sm:px-12 sm:py-8"
+      >
         <div className="mx-auto max-w-[900px]">
           <h2 className="font-heading text-[clamp(28px,3.2vw,40px)] font-medium leading-[1.1] tracking-[-0.02em]">
             Why we built this
@@ -232,7 +238,10 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="together" className="bg-[#FBF3E7] px-4 py-6 sm:px-12 sm:py-8">
+      <section
+        id="together"
+        className="scroll-mt-[90px] bg-[#FCECD6] px-4 py-6 sm:scroll-mt-[130px] sm:px-12 sm:py-8"
+      >
         <div className="mx-auto max-w-[1100px] text-center">
           <h2 className="font-heading text-[clamp(30px,3.6vw,46px)] font-medium leading-[1.1] tracking-[-0.02em]">
             Partner with us
@@ -275,7 +284,10 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="watch" className="bg-[#EAF1F6] px-4 py-6 sm:px-12 sm:py-8">
+      <section
+        id="watch"
+        className="scroll-mt-[90px] bg-[#DAE8F4] px-4 py-6 sm:scroll-mt-[130px] sm:px-12 sm:py-8"
+      >
         <div className="mx-auto max-w-[1100px] text-center">
           <h2 className="font-heading text-[clamp(30px,3.6vw,46px)] font-medium leading-[1.1] tracking-[-0.02em]">
             Watch and learn
@@ -288,7 +300,10 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="resources" className="bg-[#FBF6E3] px-4 py-6 sm:px-12 sm:py-8">
+      <section
+        id="resources"
+        className="scroll-mt-[90px] bg-[#FCF2CE] px-4 py-6 sm:scroll-mt-[130px] sm:px-12 sm:py-8"
+      >
         <div className="mx-auto max-w-[1100px]">
           <NewsCarousel />
         </div>
