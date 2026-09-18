@@ -174,3 +174,11 @@ export const VIDEOS: Video[] = [
 
 // The home page "Watch and learn" carousel rotates through the first three.
 export const FEATURED_VIDEOS = VIDEOS.slice(0, 3);
+
+// Parses "M:SS" or "MM:SS" (the real, already-accurate `dur` field) into the
+// ISO 8601 duration format schema.org's VideoObject requires — a format
+// conversion of real data, not an invented value.
+export function durationToISO8601(dur: string): string {
+  const [min, sec] = dur.split(":").map(Number);
+  return `PT${min}M${sec}S`;
+}

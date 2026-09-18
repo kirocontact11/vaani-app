@@ -21,6 +21,17 @@ export const metadata: Metadata = {
   description: "A free online-safety helpline for Indian families.",
 };
 
+// Site-wide Organization schema — every field here is real (name, url, logo);
+// no sameAs/social links since none are confirmed yet, and no fabricated data.
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "KIRO — Keep It Real Online",
+  url: SITE_URL,
+  logo: `${SITE_URL}/kiro-logo.png`,
+  description: "A free online-safety helpline for Indian families.",
+};
+
 // The 1098 emergency bar is the only chrome shared by every screen in the
 // design (including chat, which has its own very different header). The full
 // nav header/footer belong to the Home screen only; other pages bring their
@@ -44,6 +55,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${nunito.variable} ${outfit.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-base text-ink">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+        />
         <EmergencyBar />
         <main className="w-full flex-1">{children}</main>
       </body>

@@ -2,8 +2,28 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { SubpageHeader, SubpageFooter } from "@/components/SubpageChrome";
-import { TOPICS } from "@/lib/content/topics";
+import { TOPICS, type Topic } from "@/lib/content/topics";
 import { VIDEOS } from "@/lib/content/videos";
+import { SITE_URL } from "@/lib/site";
+
+// Article, not a medical schema type (e.g. MedicalWebPage) — the assistant's
+// own rules explicitly avoid clinical claims, and this content is guidance,
+// not medical advice. No datePublished: we don't have a real one to give.
+function topicJsonLd(topic: Topic) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: topic.title,
+    description: topic.what,
+    mainEntityOfPage: `${SITE_URL}/topics/${topic.slug}`,
+    publisher: {
+      "@type": "Organization",
+      name: "KIRO — Keep It Real Online",
+      url: SITE_URL,
+      logo: { "@type": "ImageObject", url: `${SITE_URL}/kiro-logo.png` },
+    },
+  };
+}
 
 export function generateStaticParams() {
   return TOPICS.map((t) => ({ slug: t.slug }));
@@ -33,6 +53,10 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(topicJsonLd(topic)) }}
+      />
       <SubpageHeader backHref="/topics" backLabel="← All topics" />
 
       <section className="mx-auto max-w-[720px] px-4 pt-5 sm:px-12 sm:pt-7">
