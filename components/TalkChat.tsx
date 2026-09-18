@@ -169,7 +169,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
     };
   }, []);
 
-  const startCall = () => {
+  const startCall = async () => {
     const vapi = vapiRef.current;
     if (!vapi) {
       setMicError("Voice isn't available right now.");
@@ -177,6 +177,32 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
       return;
     }
     set({ mic: "connecting" });
+
+    // Request the mic directly via the standard browser API before handing
+    // off to Vapi/Daily. This is the most reliable way to actually trigger
+    // the browser's permission prompt, and it gives the real underlying
+    // reason (denied / no device / in use elsewhere / insecure page) instead
+    // of Vapi's one generic message for every failure mode.
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop()); // Daily opens its own.
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : "";
+      const message =
+        name === "NotAllowedError"
+          ? "Microphone permission is blocked for this site. Click the padlock icon next to the address bar → Site settings → Microphone → Allow, then reload the page. On Mac, also check System Settings → Privacy & Security → Microphone has this browser turned on."
+          : name === "NotFoundError"
+            ? "No microphone was found on this device."
+            : name === "NotReadableError"
+              ? "Your microphone is already in use by another app or browser tab — close it and try again."
+              : name === "SecurityError"
+                ? "This page must be loaded over HTTPS (or localhost) to use the microphone."
+                : `Couldn't access the microphone (${name || "unknown error"}).`;
+      setMicError(message);
+      set({ mic: "error" });
+      return;
+    }
+
     vapi.start(VAPI_ASSISTANT_ID).catch((err: unknown) => {
       const message =
         err && typeof err === "object" && "message" in err
