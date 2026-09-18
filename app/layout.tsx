@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Nunito, Outfit } from "next/font/google";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -15,6 +16,7 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "KIRO — Keep It Real Online",
   description: "A free online-safety helpline for Indian families.",
 };
