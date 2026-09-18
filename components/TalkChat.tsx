@@ -7,7 +7,7 @@ import { KB, PLAN } from "@/lib/content/chat";
 import { VAPI_ASSISTANT_ID } from "@/lib/vapi";
 
 type Mode = "anon" | "named" | null;
-type Phase = "gate" | "form" | "topics";
+type Phase = "gate" | "topics";
 type Mic = "ask" | "connecting" | "live" | "error" | null;
 
 interface ChatState {
@@ -37,10 +37,9 @@ interface Msg {
 
 const STEP_DEFS: [string, string, string][] = [
   ["1", "Identity choice", "Anonymous, or share details"],
-  ["2", "Consent and context", "Age, role, city — only if shared"],
-  ["3", "What is going on", "Seven areas in the knowledge base"],
-  ["4", "Grounded answer", "India-specific, plain language"],
-  ["5", "Escalation", "Helpline, counsellor or report"],
+  ["2", "What is going on", "Seven areas in the knowledge base"],
+  ["3", "Grounded answer", "India-specific, plain language"],
+  ["4", "Escalation", "Helpline, counsellor or report"],
 ];
 
 function buildMsgs(s: ChatState): Msg[] {
@@ -59,15 +58,11 @@ function buildMsgs(s: ChatState): Msg[] {
   me(s.mode === "anon" ? "Stay anonymous" : "Share my details");
   if (s.mode === "anon") {
     note("Anonymous session started. You have given no name and no number.");
-  } else if (s.phase === "form") {
-    bot("Thanks — four quick fields, all optional except the first.");
-    return out;
   } else {
-    note("Details saved. A counsellor can call you back if you ask.");
+    note("Want a call back? Share your details on the booking page below — Vaani can still help right now too.");
   }
 
-  if (s.phase === "form") return out;
-  bot("What is going on? Pick whatever is closest — you can also type it yourself.");
+  bot("What is going on? Pick whatever is closest.");
   if (!s.topic) return out;
   const k = KB[s.topic];
   me(k.q);
@@ -83,9 +78,18 @@ function buildMsgs(s: ChatState): Msg[] {
   return out;
 }
 
+// Opens the user's own email client with the conversation so far, pre-filled
+// as the body — no backend, no email capture needed. They address it to
+// whichever inbox they want, same fallback pattern every other form on this
+// site already uses when there's no real endpoint to POST to.
+function emailTranscript(msgs: Msg[]) {
+  const body = msgs.map((m) => m.text).join("\n\n");
+  const subject = "My conversation with Vaani — KIRO";
+  location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 function stepsFor(s: ChatState) {
-  const stage =
-    s.phase === "gate" ? 0 : s.phase === "form" ? 1 : !s.topic ? 2 : KB[s.topic]?.escalate ? 4 : 3;
+  const stage = s.phase === "gate" ? 0 : !s.topic ? 1 : KB[s.topic]?.escalate ? 3 : 2;
   return STEP_DEFS.map(([n, t, d], i) => ({
     n,
     t,
@@ -193,31 +197,29 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
   const msgs = buildMsgs(state);
   const steps = stepsFor(state);
 
-  const showForm = state.phase === "form";
+  const showBookLink = state.mode === "named";
   const showEscalate = !!(k && k.escalate);
   const showClose = !!(state.sub && state.sub !== "menu");
   const bannerText = k ? `Topic: ${k.label}` : "Screen time, gaming, pornography, bullying, privacy, incidents, urgent";
-  const modeLabel = state.mode ? (anon ? "Anonymous" : "Details shared") : "Awaiting choice";
+  const modeLabel = state.mode ? (anon ? "Anonymous" : "Sharing details") : "Awaiting choice";
   const replyLabel = !state.mode ? "Choose one to continue" : state.topic ? "Follow-ups" : "What is this about?";
 
   const replies: { t: string; primary: boolean; onClick: () => void }[] = !state.mode
     ? [
         { t: "Stay anonymous", primary: true, onClick: () => set({ mode: "anon", phase: "topics" }) },
-        { t: "Share my details", primary: false, onClick: () => set({ mode: "named", phase: "form" }) },
+        { t: "Share my details", primary: false, onClick: () => set({ mode: "named", phase: "topics" }) },
       ]
-    : state.phase === "form"
-      ? [{ t: "Skip for now", primary: false, onClick: () => set({ phase: "topics" }) }]
-      : !state.topic
-        ? Object.keys(KB).map((key) => ({
-            t: KB[key].label,
-            primary: key === "urgent",
-            onClick: () => set({ topic: key, sub: null }),
-          }))
-        : k!.next.map(([label, value]) => ({
-            t: label,
-            primary: value === "urgent",
-            onClick: () => (value === "menu" ? set({ topic: null, sub: null }) : set({ sub: value })),
-          }));
+    : !state.topic
+      ? Object.keys(KB).map((key) => ({
+          t: KB[key].label,
+          primary: key === "urgent",
+          onClick: () => set({ topic: key, sub: null }),
+        }))
+      : k!.next.map(([label, value]) => ({
+          t: label,
+          primary: value === "urgent",
+          onClick: () => (value === "menu" ? set({ topic: null, sub: null }) : set({ sub: value })),
+        }));
 
   return (
     <div className="mx-auto max-w-[1180px] px-4 pb-17.5 pt-6.5 sm:px-8">
@@ -429,29 +431,20 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
               </div>
             ))}
 
-            {showForm && (
+            {showBookLink && (
               <div className="self-stretch rounded-xl border border-line bg-tint p-5">
-                <div className="font-heading text-[17px] font-medium">Your details</div>
-                <div className="mt-1 text-[13px] text-muted">
-                  Only used to follow up. You can delete it any time.
+                <div className="font-heading text-[17px] font-medium">Want a call back?</div>
+                <div className="mt-1 text-[13px] leading-relaxed text-muted">
+                  Share your details on our booking page — a real counsellor will follow up.
+                  Vaani can keep helping right here in the meantime.
                 </div>
-                <div className="mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
-                  {["First name", "Age of the child", "City", "Phone (optional)"].map((ph) => (
-                    <div
-                      key={ph}
-                      className="rounded-lg border border-line bg-surface px-3.5 py-3 text-sm text-muted"
-                    >
-                      {ph}
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => set({ phase: "topics" })}
+                <Link
+                  href="/book"
+                  target="_blank"
                   className="mt-3.5 inline-block rounded-lg bg-accent px-5.5 py-3 text-[14.5px] font-bold text-accent-ink"
                 >
-                  Save and continue
-                </button>
+                  Go to booking page →
+                </Link>
               </div>
             )}
 
@@ -501,6 +494,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
+                    onClick={() => emailTranscript(msgs)}
                     className="rounded-lg border-[1.5px] border-line bg-surface px-4 py-2.75 text-[13.5px] font-bold"
                   >
                     Email me this
@@ -537,12 +531,6 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
                   {r.t}
                 </button>
               ))}
-            </div>
-            <div className="mt-3.5 flex items-center gap-2.5 rounded-lg border border-line bg-surface px-4 py-3.25 text-[14.5px] text-muted">
-              Describe the problem in your own words — any Indian language works
-              <span className="ml-auto grid h-7.5 w-7.5 flex-none place-items-center rounded-md bg-accent text-sm text-white">
-                ↑
-              </span>
             </div>
           </div>
         </main>
