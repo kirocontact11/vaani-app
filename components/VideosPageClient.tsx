@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { VIDEOS, type Video } from "@/lib/content/videos";
+import { VIDEOS } from "@/lib/content/videos";
 import { submitForm } from "@/lib/content/forms";
-import VideoLightbox from "@/components/VideoLightbox";
 
 const VTABS: [string, string][] = [
   ["all", "All videos"],
@@ -16,7 +15,6 @@ const VTABS: [string, string][] = [
 export default function VideosPageClient() {
   const [vtab, setVtab] = useState("all");
   const [ttab, setTtab] = useState("all");
-  const [open, setOpen] = useState<Video | null>(null);
   const [reqSent, setReqSent] = useState(false);
   const [reqErr, setReqErr] = useState("");
   const [req, setReq] = useState({ school: "", age: "", email: "", desc: "" });
@@ -112,11 +110,12 @@ export default function VideosPageClient() {
       <section className="mx-auto max-w-[1100px] px-4 pt-3.5 sm:px-12">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(286px,1fr))] gap-5">
           {vlist.map((v) => (
-            <button
+            <a
               key={v.id}
-              type="button"
-              onClick={() => setOpen(v)}
-              aria-label={`Watch: ${v.title}`}
+              href={v.url}
+              target="_blank"
+              rel="noopener"
+              aria-label={`Watch on YouTube: ${v.title}`}
               className="rounded-[14px] border border-line bg-surface p-3 text-left transition-transform hover:-translate-y-1"
             >
               <div
@@ -144,7 +143,7 @@ export default function VideosPageClient() {
               <div className="mt-2 text-xs text-muted opacity-85">
                 Source: {v.source} · opens on YouTube ↗
               </div>
-            </button>
+            </a>
           ))}
         </div>
         {vlist.length === 0 && (
@@ -230,8 +229,6 @@ export default function VideosPageClient() {
           )}
         </div>
       </section>
-
-      {open && <VideoLightbox video={open} onClose={() => setOpen(null)} />}
     </>
   );
 }
