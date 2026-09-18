@@ -107,10 +107,14 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
   });
   const [micError, setMicError] = useState("");
   const [assistantSpeaking, setAssistantSpeaking] = useState(false);
+  const [localAudioLevel, setLocalAudioLevel] = useState(0);
   const vapiRef = useRef<Vapi | null>(null);
 
   const set = (patch: Partial<ChatState>) => setState((s) => ({ ...s, ...patch }));
-  const restart = () => setState((s) => ({ ...s, phase: "gate", mode: null, topic: null, sub: null }));
+  const restart = () => {
+    vapiRef.current?.stop().catch(() => {});
+    setState((s) => ({ ...s, phase: "gate", mode: null, topic: null, sub: null, mic: null }));
+  };
 
   // One Vapi instance for the component's lifetime; listeners are attached
   // once and read the latest state via refs rather than being re-attached
@@ -127,10 +131,15 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
     });
     vapi.on("call-end", () => {
       setAssistantSpeaking(false);
+      setLocalAudioLevel(0);
       setState((s) => ({ ...s, mic: null }));
     });
     vapi.on("speech-start", () => setAssistantSpeaking(true));
     vapi.on("speech-end", () => setAssistantSpeaking(false));
+    // Real feedback on whether the mic is actually producing signal — without
+    // this there's no way to tell "the assistant can't hear me" apart from
+    // "the mic hardware/permission is the actual problem."
+    vapi.on("local-volume-level", (level) => setLocalAudioLevel(level));
     const onError = (err: unknown) => {
       const message =
         err && typeof err === "object" && "message" in err
@@ -222,6 +231,15 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
           </Link>
         </div>
         <div className="flex items-center gap-2.5">
+          {state.mic === null && (
+            <button
+              type="button"
+              onClick={() => set({ mic: "ask" })}
+              className="rounded-lg bg-accent px-4 py-2.25 text-[13.5px] font-bold text-accent-ink"
+            >
+              🎙 Talk to Vaani
+            </button>
+          )}
           <button
             type="button"
             onClick={restart}
@@ -347,6 +365,14 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
                 <div className="mt-0.75 text-[14.5px] leading-snug text-[#FFFFFFCC]">
                   Speak in any Indian language. Take your time.
                 </div>
+                {!assistantSpeaking && (
+                  <div className="mt-2 h-1.5 w-full max-w-[180px] overflow-hidden rounded-full bg-[#FFFFFF26]">
+                    <div
+                      className="h-full rounded-full bg-accent transition-[width] duration-100"
+                      style={{ width: `${Math.min(100, localAudioLevel * 100)}%` }}
+                    />
+                  </div>
+                )}
               </div>
               <button
                 type="button"
