@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { SERVICES, AGE_OPTS, SPECS, AVAIL_OPTS, CDC_ENDPOINT, submitForm } from "@/lib/content/forms";
+import { SERVICES, AGE_OPTS, SPECS, AVAIL_OPTS, SUBMIT_ENDPOINT, submitForm } from "@/lib/content/forms";
 
 type Tab = "psych" | "cdc";
 
@@ -92,10 +92,10 @@ function Checkbox({
   );
 }
 
-const submitNote = CDC_ENDPOINT
+const submitNote = SUBMIT_ENDPOINT
   ? "Sent straight to the KIRO team."
   : "This opens your email app with the details filled in — press send there.";
-const sentNote = CDC_ENDPOINT
+const sentNote = SUBMIT_ENDPOINT
   ? "We read every listing by hand and usually reply within a week."
   : "Check that your email app opened and the message was sent. We reply within a week.";
 
@@ -105,10 +105,14 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
   const [cdc, setCdc] = useState<CdcForm>(emptyCdc);
   const [cdcErrs, setCdcErrs] = useState<Record<string, string>>({});
   const [cdcSent, setCdcSent] = useState(false);
+  const [cdcSubmitting, setCdcSubmitting] = useState(false);
+  const [cdcSubmitError, setCdcSubmitError] = useState("");
 
   const [psych, setPsych] = useState<PsychForm>(emptyPsych);
   const [psychErrs, setPsychErrs] = useState<Record<string, string>>({});
   const [psychSent, setPsychSent] = useState(false);
+  const [psychSubmitting, setPsychSubmitting] = useState(false);
+  const [psychSubmitError, setPsychSubmitError] = useState("");
 
   // Clears a field's own error message the moment it changes, matching the
   // source design's `field()` helper — otherwise a stale error keeps showing
@@ -132,7 +136,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
     });
   }
 
-  const submitCdc = () => {
+  const submitCdc = async () => {
     const errs: Record<string, string> = {};
     if (!cdc.centre.trim()) errs.centre = "Please add the name parents will look for.";
     if (!cdc.person.trim()) errs.person = "Who should we contact?";
@@ -162,12 +166,22 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
       ["Notes", cdc.note],
       ["Consent given", "yes"],
     ];
-    submitForm(rows, "List my centre — " + cdc.centre, CDC_ENDPOINT, cdc);
-    setCdcSent(true);
-    setCdcErrs({});
+    setCdcSubmitError("");
+    setCdcSubmitting(true);
+    const ok = await submitForm(rows, "List my centre — " + cdc.centre, SUBMIT_ENDPOINT, {
+      kind: "cdc",
+      ...cdc,
+    });
+    setCdcSubmitting(false);
+    if (ok) {
+      setCdcSent(true);
+      setCdcErrs({});
+    } else {
+      setCdcSubmitError("Something went wrong sending this — please try again in a moment.");
+    }
   };
 
-  const submitPsych = () => {
+  const submitPsych = async () => {
     const errs: Record<string, string> = {};
     if (!psych.pname.trim()) errs.pname = "Please add your full name.";
     if (!psych.qualification.trim()) errs.qualification = "What is your qualification?";
@@ -195,9 +209,19 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
       ["Email", psych.email],
       ["Consent given", "yes"],
     ];
-    submitForm(rows, "Psychologist registration — " + psych.pname, CDC_ENDPOINT, psych);
-    setPsychSent(true);
-    setPsychErrs({});
+    setPsychSubmitError("");
+    setPsychSubmitting(true);
+    const ok = await submitForm(rows, "Psychologist registration — " + psych.pname, SUBMIT_ENDPOINT, {
+      kind: "psych",
+      ...psych,
+    });
+    setPsychSubmitting(false);
+    if (ok) {
+      setPsychSent(true);
+      setPsychErrs({});
+    } else {
+      setPsychSubmitError("Something went wrong sending this — please try again in a moment.");
+    }
   };
 
   return (
@@ -424,12 +448,16 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                   <button
                     type="button"
                     onClick={submitPsych}
-                    className="rounded-lg bg-accent px-7 py-3.5 text-[15.5px] font-bold text-accent-ink"
+                    disabled={psychSubmitting}
+                    className="rounded-lg bg-accent px-7 py-3.5 text-[15.5px] font-bold text-accent-ink disabled:opacity-60"
                   >
-                    Register to join
+                    {psychSubmitting ? "Sending…" : "Register to join"}
                   </button>
                   <div className="max-w-[38ch] text-sm text-muted">{submitNote}</div>
                 </div>
+                {psychSubmitError && (
+                  <div className="text-[13px] font-semibold text-alert">{psychSubmitError}</div>
+                )}
               </div>
             )}
           </div>
@@ -632,12 +660,16 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                   <button
                     type="button"
                     onClick={submitCdc}
-                    className="rounded-lg bg-accent px-7 py-3.5 text-[15.5px] font-bold text-accent-ink"
+                    disabled={cdcSubmitting}
+                    className="rounded-lg bg-accent px-7 py-3.5 text-[15.5px] font-bold text-accent-ink disabled:opacity-60"
                   >
-                    Send my listing
+                    {cdcSubmitting ? "Sending…" : "Send my listing"}
                   </button>
                   <div className="max-w-[38ch] text-sm text-muted">{submitNote}</div>
                 </div>
+                {cdcSubmitError && (
+                  <div className="text-[13px] font-semibold text-alert">{cdcSubmitError}</div>
+                )}
               </div>
             )}
           </div>

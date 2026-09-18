@@ -30,7 +30,7 @@ export default function VideosPageClient() {
     [vtab, ttab]
   );
 
-  const submitReq = () => {
+  const submitReq = async () => {
     if (!req.desc.trim()) {
       setReqErr("Tell us what the short should cover.");
       return;
@@ -41,7 +41,10 @@ export default function VideosPageClient() {
       ["Email", req.email],
       ["What it should cover", req.desc],
     ];
-    submitForm(rows, "Video request for school", null);
+    // Deliberately stays on the mailto: fallback — no table was built for
+    // video requests, out of scope for C4 (only /register and /book write
+    // to Supabase).
+    await submitForm(rows, "Video request for school", null);
     setReqSent(true);
     setReqErr("");
   };

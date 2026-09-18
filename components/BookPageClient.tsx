@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BOOK_TIMES, submitForm } from "@/lib/content/forms";
+import { BOOK_TIMES, SUBMIT_ENDPOINT, submitForm } from "@/lib/content/forms";
 
 interface BookForm {
   bname: string;
@@ -28,6 +28,8 @@ export default function BookPageClient() {
   const [form, setForm] = useState<BookForm>(emptyBook);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const toggleTime = (t: string) =>
     setForm((f) => ({
@@ -47,7 +49,7 @@ export default function BookPageClient() {
     });
   }
 
-  const submitBook = () => {
+  const submitBook = async () => {
     const nextErrs: Record<string, string> = {};
     if (!form.bname.trim()) nextErrs.bname = "What should we call you?";
     if (!form.bage.trim()) nextErrs.bage = "Your child’s age.";
@@ -66,9 +68,19 @@ export default function BookPageClient() {
       ["What’s going on", form.bwhat],
       ["Preferred time", form.btime.join(", ")],
     ];
-    submitForm(rows, "Appointment request — " + form.bname, null);
-    setSent(true);
-    setErrs({});
+    setSubmitError("");
+    setSubmitting(true);
+    const ok = await submitForm(rows, "Appointment request — " + form.bname, SUBMIT_ENDPOINT, {
+      kind: "book",
+      ...form,
+    });
+    setSubmitting(false);
+    if (ok) {
+      setSent(true);
+      setErrs({});
+    } else {
+      setSubmitError("Something went wrong sending this — please try again in a moment.");
+    }
   };
 
   return (
@@ -87,8 +99,9 @@ export default function BookPageClient() {
         <div role="status" className="mt-5.5 rounded-[14px] border border-accent bg-tint p-6.5">
           <div className="font-heading text-xl font-medium">Thank you — that&apos;s with us</div>
           <p className="mt-2 text-[15.5px] leading-relaxed text-muted">
-            This opens your email app with the details filled in — press send there. Someone
-            will call you back soon.
+            {SUBMIT_ENDPOINT
+              ? "We've got your details. Someone will call you back soon."
+              : "This opens your email app with the details filled in — press send there. Someone will call you back soon."}
           </p>
           <Link href="/" className="mt-3.5 inline-block rounded-lg bg-accent px-5.5 py-3 text-[15px] font-bold text-accent-ink">
             Back to KIRO
@@ -179,14 +192,20 @@ export default function BookPageClient() {
             <button
               type="button"
               onClick={submitBook}
-              className="rounded-lg bg-accent px-7 py-3.5 text-[15.5px] font-bold text-accent-ink"
+              disabled={submitting}
+              className="rounded-lg bg-accent px-7 py-3.5 text-[15.5px] font-bold text-accent-ink disabled:opacity-60"
             >
-              Request a call back
+              {submitting ? "Sending…" : "Request a call back"}
             </button>
             <div className="max-w-[38ch] text-sm text-muted">
-              This opens your email app with the details filled in — press send there.
+              {SUBMIT_ENDPOINT
+                ? "We'll pass this straight to the team."
+                : "This opens your email app with the details filled in — press send there."}
             </div>
           </div>
+          {submitError && (
+            <div className="text-[13px] font-semibold text-alert">{submitError}</div>
+          )}
         </div>
       )}
     </section>
