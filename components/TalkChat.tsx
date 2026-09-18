@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Vapi from "@vapi-ai/web";
 import { KB, PLAN } from "@/lib/content/chat";
+import { VAPI_ASSISTANT_ID } from "@/lib/vapi";
 
 type Mode = "anon" | "named" | null;
 type Phase = "gate" | "form" | "topics";
-type Mic = "ask" | "live" | null;
+type Mic = "ask" | "connecting" | "live" | "error" | null;
 
 interface ChatState {
   mode: Mode;
@@ -103,9 +105,79 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
     sub: null,
     mic: initial.mic ?? null,
   });
+  const [micError, setMicError] = useState("");
+  const [assistantSpeaking, setAssistantSpeaking] = useState(false);
+  const vapiRef = useRef<Vapi | null>(null);
 
   const set = (patch: Partial<ChatState>) => setState((s) => ({ ...s, ...patch }));
   const restart = () => setState((s) => ({ ...s, phase: "gate", mode: null, topic: null, sub: null }));
+
+  // One Vapi instance for the component's lifetime; listeners are attached
+  // once and read the latest state via refs rather than being re-attached
+  // on every render.
+  useEffect(() => {
+    const key = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
+    if (!key) return;
+    const vapi = new Vapi(key);
+    vapiRef.current = vapi;
+
+    vapi.on("call-start", () => {
+      setMicError("");
+      setState((s) => ({ ...s, mic: "live" }));
+    });
+    vapi.on("call-end", () => {
+      setAssistantSpeaking(false);
+      setState((s) => ({ ...s, mic: null }));
+    });
+    vapi.on("speech-start", () => setAssistantSpeaking(true));
+    vapi.on("speech-end", () => setAssistantSpeaking(false));
+    const onError = (err: unknown) => {
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message?: unknown }).message)
+          : "Something went wrong with the call.";
+      setMicError(message);
+      setState((s) => ({ ...s, mic: "error" }));
+    };
+    vapi.on("error", onError);
+    vapi.on("call-start-failed", onError);
+    // Daily's own naming: this fires for audio device failures too, not just
+    // video — this is the actual channel a denied mic permission comes
+    // through, confirmed by reading the SDK's source rather than guessing.
+    vapi.on("camera-error", () => {
+      setMicError("Microphone access was denied. Please allow microphone permission and try again.");
+      setState((s) => ({ ...s, mic: "error" }));
+    });
+
+    return () => {
+      vapi.stop().catch(() => {});
+      vapi.removeAllListeners();
+      vapiRef.current = null;
+    };
+  }, []);
+
+  const startCall = () => {
+    const vapi = vapiRef.current;
+    if (!vapi) {
+      setMicError("Voice isn't available right now.");
+      set({ mic: "error" });
+      return;
+    }
+    set({ mic: "connecting" });
+    vapi.start(VAPI_ASSISTANT_ID).catch((err: unknown) => {
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message?: unknown }).message)
+          : "Couldn't start the call — check your microphone permission.";
+      setMicError(message);
+      set({ mic: "error" });
+    });
+  };
+
+  const stopCall = () => {
+    vapiRef.current?.stop().catch(() => {});
+    set({ mic: null });
+  };
 
   const k = state.topic ? KB[state.topic] : null;
   const anon = state.mode === "anon";
@@ -228,7 +300,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
               <div className="flex flex-wrap gap-2.25">
                 <button
                   type="button"
-                  onClick={() => set({ mic: "live" })}
+                  onClick={startCall}
                   className="rounded-lg bg-accent px-5 py-3 text-[14.5px] font-bold text-accent-ink"
                 >
                   Allow
@@ -243,24 +315,72 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
               </div>
             </div>
           )}
+          {state.mic === "connecting" && (
+            <div className="mx-5.5 mt-6 flex flex-wrap items-center gap-4.5 rounded-xl bg-ink p-5.5 text-white">
+              <div className="grid h-11.5 w-11.5 flex-none animate-pulse place-items-center rounded-full bg-accent">
+                <div className="h-[19px] w-3 rounded-full bg-white" />
+              </div>
+              <div className="min-w-[200px] flex-1">
+                <div className="font-heading text-[18px] font-medium">Connecting…</div>
+                <div className="mt-0.75 text-[14.5px] leading-snug text-[#FFFFFFCC]">
+                  One moment while we reach Vaani.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={stopCall}
+                className="rounded-lg bg-[#FFFFFF2E] px-4.5 py-2.75 text-sm font-bold"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
           {state.mic === "live" && (
             <div className="mx-5.5 mt-6 flex flex-wrap items-center gap-4.5 rounded-xl bg-ink p-5.5 text-white">
               <div className="grid h-11.5 w-11.5 flex-none place-items-center rounded-full bg-accent">
                 <div className="h-[19px] w-3 rounded-full bg-white" />
               </div>
               <div className="min-w-[200px] flex-1">
-                <div className="font-heading text-[18px] font-medium">Listening…</div>
+                <div className="font-heading text-[18px] font-medium">
+                  {assistantSpeaking ? "Vaani is speaking…" : "Listening…"}
+                </div>
                 <div className="mt-0.75 text-[14.5px] leading-snug text-[#FFFFFFCC]">
                   Speak in any Indian language. Take your time.
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => set({ mic: null })}
+                onClick={stopCall}
                 className="rounded-lg bg-[#FFFFFF2E] px-4.5 py-2.75 text-sm font-bold"
               >
                 Stop
               </button>
+            </div>
+          )}
+          {state.mic === "error" && (
+            <div className="mx-5.5 mt-6 flex flex-wrap items-center gap-5 rounded-xl border border-alert bg-tint p-6">
+              <div className="min-w-[220px] flex-1">
+                <div className="font-heading text-lg font-medium">Couldn&apos;t connect</div>
+                <div className="mt-1 text-[14.5px] leading-snug text-muted">
+                  {micError || "Check your microphone permission and try again."}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2.25">
+                <button
+                  type="button"
+                  onClick={startCall}
+                  className="rounded-lg bg-accent px-5 py-3 text-[14.5px] font-bold text-accent-ink"
+                >
+                  Try again
+                </button>
+                <button
+                  type="button"
+                  onClick={() => set({ mic: null })}
+                  className="rounded-lg border-[1.5px] border-line bg-surface px-5 py-3 text-[14.5px] font-bold"
+                >
+                  I&apos;ll type instead
+                </button>
+              </div>
             </div>
           )}
 
