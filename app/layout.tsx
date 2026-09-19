@@ -54,7 +54,7 @@ function EmergencyBar() {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${nunito.variable} ${outfit.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col bg-base text-ink">
+      <body className="flex min-h-full flex-col bg-page text-ink">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}

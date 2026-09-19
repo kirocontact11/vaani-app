@@ -124,12 +124,16 @@ export default function Home() {
           <div className="relative flex min-h-[320px] flex-col items-center justify-center">
             <div className="relative grid h-[240px] w-[240px] place-items-center">
               <div
-                className="pointer-events-none absolute h-[258px] w-[258px] rounded-full border-2 border-[#2F5D5040]"
-                style={{ animation: "pulse 3.6s ease-out infinite" }}
+                className="pointer-events-none absolute h-[258px] w-[258px] rounded-full border-2 border-[#2F5D5066]"
+                style={{ animation: "pulse 3.6s ease-out 0s infinite" }}
               />
               <div
-                className="pointer-events-none absolute h-[258px] w-[258px] rounded-full border-2 border-[#2F5D5040]"
-                style={{ animation: "pulse 3.6s ease-out 1.8s infinite" }}
+                className="pointer-events-none absolute h-[258px] w-[258px] rounded-full border-2 border-[#2F5D5066]"
+                style={{ animation: "pulse 3.6s ease-out 1.2s infinite" }}
+              />
+              <div
+                className="pointer-events-none absolute h-[258px] w-[258px] rounded-full border-2 border-[#2F5D5066]"
+                style={{ animation: "pulse 3.6s ease-out 2.4s infinite" }}
               />
               <Link
                 href="/talk/voice"

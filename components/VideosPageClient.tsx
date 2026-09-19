@@ -182,7 +182,7 @@ export default function VideosPageClient() {
                   <input
                     value={req.school}
                     onChange={(e) => setReq((r) => ({ ...r, school: e.target.value }))}
-                    className="rounded-lg border-[1.5px] border-line bg-base px-3 py-2.5 text-[14.5px] font-normal"
+                    className="rounded-lg border-[1.5px] border-line bg-page px-3 py-2.5 text-[14.5px] font-normal"
                   />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm font-bold">
@@ -191,7 +191,7 @@ export default function VideosPageClient() {
                     value={req.age}
                     onChange={(e) => setReq((r) => ({ ...r, age: e.target.value }))}
                     placeholder="e.g. 10–13"
-                    className="rounded-lg border-[1.5px] border-line bg-base px-3 py-2.5 text-[14.5px] font-normal"
+                    className="rounded-lg border-[1.5px] border-line bg-page px-3 py-2.5 text-[14.5px] font-normal"
                   />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm font-bold">
@@ -200,7 +200,7 @@ export default function VideosPageClient() {
                     type="email"
                     value={req.email}
                     onChange={(e) => setReq((r) => ({ ...r, email: e.target.value }))}
-                    className="rounded-lg border-[1.5px] border-line bg-base px-3 py-2.5 text-[14.5px] font-normal"
+                    className="rounded-lg border-[1.5px] border-line bg-page px-3 py-2.5 text-[14.5px] font-normal"
                   />
                 </label>
               </div>
@@ -214,7 +214,7 @@ export default function VideosPageClient() {
                     setReqErr("");
                   }}
                   placeholder="The worry, the situation, anything specific you want covered"
-                  className="resize-y rounded-lg border-[1.5px] border-line bg-base px-3 py-2.5 text-[14.5px] font-normal"
+                  className="resize-y rounded-lg border-[1.5px] border-line bg-page px-3 py-2.5 text-[14.5px] font-normal"
                 />
                 <span className="text-[12.5px] font-semibold text-alert">{reqErr}</span>
               </label>

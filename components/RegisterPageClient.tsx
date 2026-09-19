@@ -80,7 +80,7 @@ function Checkbox({
   onChange: () => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-2.25 rounded-lg border-[1.5px] border-line bg-base px-3.5 py-2.25 text-[14.5px]">
+    <label className="flex cursor-pointer items-center gap-2.25 rounded-lg border-[1.5px] border-line bg-page px-3.5 py-2.25 text-[14.5px]">
       <input
         type="checkbox"
         checked={checked}
@@ -324,7 +324,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       <input
                         value={psych.pname}
                         onChange={(e) => updatePsych("pname", e.target.value)}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{psychErrs.pname}</span>
                     </label>
@@ -334,7 +334,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                         value={psych.qualification}
                         onChange={(e) => updatePsych("qualification", e.target.value)}
                         placeholder="e.g. M.Phil Clinical Psychology"
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{psychErrs.qualification}</span>
                     </label>
@@ -343,7 +343,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       <input
                         value={psych.license}
                         onChange={(e) => updatePsych("license", e.target.value)}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{psychErrs.license}</span>
                     </label>
@@ -354,7 +354,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                         min={0}
                         value={psych.years}
                         onChange={(e) => setPsych((p) => ({ ...p, years: e.target.value }))}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                     </label>
                   </div>
@@ -390,7 +390,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       value={psych.langs}
                       onChange={(e) => setPsych((p) => ({ ...p, langs: e.target.value }))}
                       placeholder="e.g. Hindi, English, Marathi"
-                      className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                      className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                     />
                   </label>
                 </div>
@@ -403,7 +403,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       <input
                         value={psych.city}
                         onChange={(e) => updatePsych("city", e.target.value)}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{psychErrs.city}</span>
                     </label>
@@ -413,7 +413,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                         type="tel"
                         value={psych.phone}
                         onChange={(e) => updatePsych("phone", e.target.value)}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{psychErrs.phone}</span>
                     </label>
@@ -423,7 +423,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                         type="email"
                         value={psych.email}
                         onChange={(e) => updatePsych("email", e.target.value)}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{psychErrs.email}</span>
                     </label>
@@ -521,7 +521,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       <input
                         value={cdc.centre}
                         onChange={(e) => updateCdc("centre", e.target.value)}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{cdcErrs.centre}</span>
                     </label>
@@ -530,7 +530,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       <input
                         value={cdc.person}
                         onChange={(e) => updateCdc("person", e.target.value)}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{cdcErrs.person}</span>
                     </label>
@@ -540,7 +540,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                         value={cdc.role}
                         onChange={(e) => updateCdc("role", e.target.value)}
                         placeholder="e.g. Clinical psychologist, Director"
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{cdcErrs.role}</span>
                     </label>
@@ -577,7 +577,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       value={cdc.langs}
                       onChange={(e) => setCdc((c) => ({ ...c, langs: e.target.value }))}
                       placeholder="e.g. Hindi, English, Marathi"
-                      className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                      className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                     />
                   </label>
                 </div>
@@ -590,7 +590,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       <input
                         value={cdc.city}
                         onChange={(e) => updateCdc("city", e.target.value)}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{cdcErrs.city}</span>
                     </label>
@@ -599,7 +599,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       <input
                         value={cdc.area}
                         onChange={(e) => setCdc((c) => ({ ...c, area: e.target.value }))}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                     </label>
                     <label className="flex flex-col gap-1.5 text-[14.5px] font-bold">
@@ -608,7 +608,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                         type="tel"
                         value={cdc.phone}
                         onChange={(e) => updateCdc("phone", e.target.value)}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{cdcErrs.phone}</span>
                     </label>
@@ -618,7 +618,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                         type="email"
                         value={cdc.email}
                         onChange={(e) => updateCdc("email", e.target.value)}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                       <span className="text-[13px] font-semibold text-alert">{cdcErrs.email}</span>
                     </label>
@@ -627,7 +627,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       <input
                         value={cdc.site}
                         onChange={(e) => setCdc((c) => ({ ...c, site: e.target.value }))}
-                        className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                        className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                       />
                     </label>
                   </div>
@@ -637,7 +637,7 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
                       rows={3}
                       value={cdc.note}
                       onChange={(e) => setCdc((c) => ({ ...c, note: e.target.value }))}
-                      className="resize-y rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                      className="resize-y rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
                     />
                   </label>
                 </div>

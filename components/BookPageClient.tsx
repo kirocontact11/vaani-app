@@ -115,7 +115,7 @@ export default function BookPageClient() {
               <input
                 value={form.bname}
                 onChange={(e) => updateField("bname", e.target.value)}
-                className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
               />
               <span className="text-[13px] font-semibold text-alert">{errs.bname}</span>
             </label>
@@ -124,7 +124,7 @@ export default function BookPageClient() {
               <input
                 value={form.bage}
                 onChange={(e) => updateField("bage", e.target.value)}
-                className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
               />
               <span className="text-[13px] font-semibold text-alert">{errs.bage}</span>
             </label>
@@ -133,7 +133,7 @@ export default function BookPageClient() {
               <input
                 value={form.bcity}
                 onChange={(e) => updateField("bcity", e.target.value)}
-                className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
               />
               <span className="text-[13px] font-semibold text-alert">{errs.bcity}</span>
             </label>
@@ -143,7 +143,7 @@ export default function BookPageClient() {
                 type="tel"
                 value={form.bphone}
                 onChange={(e) => updateField("bphone", e.target.value)}
-                className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
               />
               <span className="text-[13px] font-semibold text-alert">{errs.bphone}</span>
             </label>
@@ -153,7 +153,7 @@ export default function BookPageClient() {
                 value={form.blang}
                 onChange={(e) => setForm((f) => ({ ...f, blang: e.target.value }))}
                 placeholder="e.g. Hindi, English"
-                className="rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+                className="rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
               />
             </label>
           </div>
@@ -164,7 +164,7 @@ export default function BookPageClient() {
               rows={3}
               value={form.bwhat}
               onChange={(e) => setForm((f) => ({ ...f, bwhat: e.target.value }))}
-              className="resize-y rounded-lg border-[1.5px] border-line bg-base px-3.25 py-2.75 text-[15px] font-normal"
+              className="resize-y rounded-lg border-[1.5px] border-line bg-page px-3.25 py-2.75 text-[15px] font-normal"
             />
           </label>
 
@@ -174,7 +174,7 @@ export default function BookPageClient() {
               {BOOK_TIMES.map((t) => (
                 <label
                   key={t}
-                  className="flex cursor-pointer items-center gap-2.25 rounded-lg border-[1.5px] border-line bg-base px-3.5 py-2.25 text-[14.5px]"
+                  className="flex cursor-pointer items-center gap-2.25 rounded-lg border-[1.5px] border-line bg-page px-3.5 py-2.25 text-[14.5px]"
                 >
                   <input
                     type="checkbox"

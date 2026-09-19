@@ -323,7 +323,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
               <div className="font-heading text-[17px] font-medium">Speak to Vaani</div>
               <div className="text-[12.5px] text-muted">{bannerText}</div>
             </div>
-            <div className="ml-auto flex items-center gap-2 rounded-md border border-line bg-base px-3 py-1.5 text-xs font-bold">
+            <div className="ml-auto flex items-center gap-2 rounded-md border border-line bg-page px-3 py-1.5 text-xs font-bold">
               <span
                 className="h-1.75 w-1.75 rounded-full"
                 style={{ background: state.mode ? "#2F5D50" : "#C0392B" }}
@@ -537,7 +537,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
             )}
           </div>
 
-          <div className="border-t border-line bg-base px-5.5 pb-5.5 pt-4.5">
+          <div className="border-t border-line bg-page px-5.5 pb-5.5 pt-4.5">
             <div className="font-heading text-[11.5px] font-medium uppercase tracking-[0.16em] text-muted">
               {replyLabel}
             </div>
