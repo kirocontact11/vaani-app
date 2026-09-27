@@ -17,22 +17,28 @@ function isRateLimited(ip: string): boolean {
   return recent.length > RATE_LIMIT;
 }
 
-const phoneOrEmail = (v: { phone?: string; email?: string }) =>
-  Boolean(v.phone?.trim() || v.email?.trim());
+// Length caps keep one request from storing megabytes of text; generous
+// enough that no real form entry comes near them.
+const required = z.string().trim().min(1).max(200);
+const optional = z.string().trim().max(200).optional().default("");
+const longText = z.string().trim().max(5000).optional().default("");
+const choices = z.array(z.string().max(100)).max(20).optional().default([]);
+
+const phoneOrEmail = (v: { phone: string; email: string }) => Boolean(v.phone || v.email);
 
 const psychSchema = z
   .object({
     kind: z.literal("psych"),
-    pname: z.string().trim().min(1),
-    qualification: z.string().trim().min(1),
-    license: z.string().trim().min(1),
-    years: z.string().optional().default(""),
-    specs: z.array(z.string()).optional().default([]),
-    avail: z.array(z.string()).optional().default([]),
-    langs: z.string().optional().default(""),
-    city: z.string().trim().min(1),
-    phone: z.string().optional().default(""),
-    email: z.string().optional().default(""),
+    pname: required,
+    qualification: required,
+    license: required,
+    years: optional,
+    specs: choices,
+    avail: choices,
+    langs: optional,
+    city: required,
+    phone: optional,
+    email: optional,
     pconsent: z.literal(true),
   })
   .refine(phoneOrEmail, { message: "phone or email required" });
@@ -40,31 +46,31 @@ const psychSchema = z
 const cdcSchema = z
   .object({
     kind: z.literal("cdc"),
-    centre: z.string().trim().min(1),
-    person: z.string().trim().min(1),
-    role: z.string().trim().min(1),
-    services: z.array(z.string()).optional().default([]),
-    ages: z.array(z.string()).optional().default([]),
-    langs: z.string().optional().default(""),
-    city: z.string().trim().min(1),
-    area: z.string().optional().default(""),
-    phone: z.string().optional().default(""),
-    email: z.string().optional().default(""),
-    site: z.string().optional().default(""),
-    note: z.string().optional().default(""),
+    centre: required,
+    person: required,
+    role: required,
+    services: choices,
+    ages: choices,
+    langs: optional,
+    city: required,
+    area: optional,
+    phone: optional,
+    email: optional,
+    site: optional,
+    note: longText,
     consent: z.literal(true),
   })
   .refine(phoneOrEmail, { message: "phone or email required" });
 
 const bookSchema = z.object({
   kind: z.literal("book"),
-  bname: z.string().trim().min(1),
-  bage: z.string().trim().min(1),
-  bcity: z.string().trim().min(1),
-  bphone: z.string().trim().min(1),
-  blang: z.string().optional().default(""),
-  bwhat: z.string().optional().default(""),
-  btime: z.array(z.string()).optional().default([]),
+  bname: required,
+  bage: required,
+  bcity: required,
+  bphone: required,
+  blang: optional,
+  bwhat: longText,
+  btime: choices,
 });
 
 const bodySchema = z.discriminatedUnion("kind", [psychSchema, cdcSchema, bookSchema]);
@@ -147,7 +153,7 @@ async function notifyTeam(subject: string) {
   try {
     await resend.emails.send({
       from: "KIRO <onboarding@resend.dev>",
-      to: process.env.NOTIFY_EMAIL || "hello@kirohelp.com",
+      to: process.env.NOTIFY_EMAIL || "kiro.contact11@gmail.com",
       subject,
       text: "A new submission just came in — check the Supabase dashboard for details.",
     });

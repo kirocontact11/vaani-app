@@ -98,7 +98,7 @@ export default function Home() {
             <div className="inline-flex items-center gap-2 rounded-lg border border-line bg-tint px-4 py-1.75 text-[13.5px] font-bold text-ink">
               Free · For families in India · In any Indian language
             </div>
-            <h1 className="mt-4.5 max-w-[15ch] font-heading text-[clamp(38px,5.2vw,68px)] font-semibold leading-[1.05] tracking-[-0.02em] text-wrap-pretty">
+            <h1 className="mt-4.5 max-w-[15ch] font-heading text-[clamp(38px,5.2vw,68px)] font-semibold leading-[1.05] tracking-[-0.02em] text-pretty">
               You&apos;re not the only <HeroRotator />{" "}
               <span className="sr-only">parent, teacher or student</span> wondering.
             </h1>
@@ -125,15 +125,15 @@ export default function Home() {
             <div className="relative grid h-[240px] w-[240px] place-items-center">
               <div
                 className="pointer-events-none absolute h-[258px] w-[258px] rounded-full border-2 border-[#2F5D5066]"
-                style={{ animation: "pulse 3.6s ease-out 0s infinite" }}
+                style={{ animation: "ring-pulse 3.6s ease-out 0s infinite" }}
               />
               <div
                 className="pointer-events-none absolute h-[258px] w-[258px] rounded-full border-2 border-[#2F5D5066]"
-                style={{ animation: "pulse 3.6s ease-out 1.2s infinite" }}
+                style={{ animation: "ring-pulse 3.6s ease-out 1.2s infinite" }}
               />
               <div
                 className="pointer-events-none absolute h-[258px] w-[258px] rounded-full border-2 border-[#2F5D5066]"
-                style={{ animation: "pulse 3.6s ease-out 2.4s infinite" }}
+                style={{ animation: "ring-pulse 3.6s ease-out 2.4s infinite" }}
               />
               <Link
                 href="/talk/voice"

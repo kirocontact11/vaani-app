@@ -99,9 +99,7 @@ export default function BookPageClient() {
         <div role="status" className="mt-5.5 rounded-[14px] border border-accent bg-tint p-6.5">
           <div className="font-heading text-xl font-medium">Thank you — that&apos;s with us</div>
           <p className="mt-2 text-[15.5px] leading-relaxed text-muted">
-            {SUBMIT_ENDPOINT
-              ? "We've got your details. Someone will call you back soon."
-              : "This opens your email app with the details filled in — press send there. Someone will call you back soon."}
+            We&apos;ve got your details. Someone will call you back soon.
           </p>
           <Link href="/" className="mt-3.5 inline-block rounded-lg bg-accent px-5.5 py-3 text-[15px] font-bold text-accent-ink">
             Back to KIRO
@@ -198,9 +196,7 @@ export default function BookPageClient() {
               {submitting ? "Sending…" : "Request a call back"}
             </button>
             <div className="max-w-[38ch] text-sm text-muted">
-              {SUBMIT_ENDPOINT
-                ? "We'll pass this straight to the team."
-                : "This opens your email app with the details filled in — press send there."}
+              We&apos;ll pass this straight to the team.
             </div>
           </div>
           {submitError && (

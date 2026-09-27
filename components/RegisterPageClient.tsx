@@ -70,6 +70,16 @@ function toggleIn(list: string[], val: string) {
   return list.includes(val) ? list.filter((v) => v !== val) : [...list, val];
 }
 
+// Phone and email share one "at least one of these" error, so fixing either
+// clears both — otherwise the other field keeps showing a stale error.
+function withoutErr(errs: Record<string, string>, key: string) {
+  const keys = key === "phone" || key === "email" ? ["phone", "email"] : [key];
+  if (!keys.some((k) => k in errs)) return errs;
+  const next = { ...errs };
+  for (const k of keys) delete next[k];
+  return next;
+}
+
 function Checkbox({
   label,
   checked,
@@ -92,12 +102,8 @@ function Checkbox({
   );
 }
 
-const submitNote = SUBMIT_ENDPOINT
-  ? "Sent straight to the KIRO team."
-  : "This opens your email app with the details filled in — press send there.";
-const sentNote = SUBMIT_ENDPOINT
-  ? "We read every listing by hand and usually reply within a week."
-  : "Check that your email app opened and the message was sent. We reply within a week.";
+const submitNote = "Sent straight to the KIRO team.";
+const sentNote = "We read every listing by hand and usually reply within a week.";
 
 export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) {
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -119,21 +125,11 @@ export default function RegisterPageClient({ initialTab }: { initialTab: Tab }) 
   // even after the user has fixed it, right up until the next submit attempt.
   function updateCdc<K extends keyof CdcForm>(key: K, value: CdcForm[K]) {
     setCdc((c) => ({ ...c, [key]: value }));
-    setCdcErrs((e) => {
-      if (!(key in e)) return e;
-      const next = { ...e };
-      delete next[key];
-      return next;
-    });
+    setCdcErrs((e) => withoutErr(e, key));
   }
   function updatePsych<K extends keyof PsychForm>(key: K, value: PsychForm[K]) {
     setPsych((p) => ({ ...p, [key]: value }));
-    setPsychErrs((e) => {
-      if (!(key in e)) return e;
-      const next = { ...e };
-      delete next[key];
-      return next;
-    });
+    setPsychErrs((e) => withoutErr(e, key));
   }
 
   const submitCdc = async () => {

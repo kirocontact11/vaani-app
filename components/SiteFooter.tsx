@@ -15,14 +15,14 @@ export default function SiteFooter() {
         keep their children safe online.
       </p>
       <div className="flex flex-wrap justify-center gap-5 text-[15px] font-bold">
-        <a href="mailto:hello@kirohelp.com">hello@kirohelp.com</a>
+        <a href="mailto:kiro.contact11@gmail.com">kiro.contact11@gmail.com</a>
         <a href="https://www.childlineindia.org/a/contact" target="_blank" rel="noopener">
           1098 Childline
         </a>
         <a href="https://cybercrime.gov.in" target="_blank" rel="noopener">
           1930 Cyber Crime
         </a>
-        <a href="mailto:hello@kirohelp.com?subject=Privacy">Privacy</a>
+        <a href="mailto:kiro.contact11@gmail.com?subject=Privacy">Privacy</a>
       </div>
       <div className="mt-2 text-[13.5px] text-muted">
         © 2026 KIRO · Keep It Real Online India, New Delhi · kirohelp.com

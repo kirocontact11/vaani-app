@@ -32,7 +32,7 @@ export default function TopicsHubPage() {
             >
               <div className="font-heading text-xl font-medium">{tp.title}</div>
               <p className="mt-2 text-[14.5px] leading-relaxed text-muted">
-                {tp.what.slice(0, 90)}…
+                {tp.what.slice(0, 90).replace(/[\s,.;:—-]+\S*$/, "")}…
               </p>
               <div className="mt-3 text-[13.5px] font-bold text-accent">Read more →</div>
             </Link>

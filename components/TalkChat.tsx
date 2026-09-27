@@ -75,6 +75,10 @@ function buildMsgs(s: ChatState): Msg[] {
     me("He gets angry when I stop him");
     bot(PLAN.anger);
   }
+  if (s.sub === "urgent") {
+    me(k.next.find(([, v]) => v === "urgent")?.[0] ?? "This is urgent");
+    bot("Thank you for telling me — you have done nothing wrong. This needs a real person today, so here is who to call right now.");
+  }
   return out;
 }
 
@@ -89,7 +93,7 @@ function emailTranscript(msgs: Msg[]) {
 }
 
 function stepsFor(s: ChatState) {
-  const stage = s.phase === "gate" ? 0 : !s.topic ? 1 : KB[s.topic]?.escalate ? 3 : 2;
+  const stage = s.phase === "gate" ? 0 : !s.topic ? 1 : KB[s.topic]?.escalate || s.sub === "urgent" ? 3 : 2;
   return STEP_DEFS.map(([n, t, d], i) => ({
     n,
     t,
@@ -113,9 +117,13 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
   const [assistantSpeaking, setAssistantSpeaking] = useState(false);
   const [localAudioLevel, setLocalAudioLevel] = useState(0);
   const vapiRef = useRef<Vapi | null>(null);
+  // Daily fires a trailing "meeting ended" error after every hang-up; errors
+  // outside an active call must not flip the UI to the error panel.
+  const callActiveRef = useRef(false);
 
   const set = (patch: Partial<ChatState>) => setState((s) => ({ ...s, ...patch }));
   const restart = () => {
+    callActiveRef.current = false;
     vapiRef.current?.stop().catch(() => {});
     setState((s) => ({ ...s, phase: "gate", mode: null, topic: null, sub: null, mic: null }));
   };
@@ -129,11 +137,19 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
     const vapi = new Vapi(key);
     vapiRef.current = vapi;
 
+    // Dev-only: per-stage timings so a slow connect can be measured, not guessed at.
+    if (process.env.NODE_ENV !== "production") {
+      vapi.on("call-start-progress", (p) =>
+        console.info(`[vaani] ${p.stage} ${p.status}${p.duration != null ? ` ${p.duration}ms` : ""}`)
+      );
+    }
     vapi.on("call-start", () => {
+      if (process.env.NODE_ENV !== "production") console.timeEnd("[vaani] click → listening");
       setMicError("");
       setState((s) => ({ ...s, mic: "live" }));
     });
     vapi.on("call-end", () => {
+      callActiveRef.current = false;
       setAssistantSpeaking(false);
       setLocalAudioLevel(0);
       setState((s) => ({ ...s, mic: null }));
@@ -145,10 +161,12 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
     // "the mic hardware/permission is the actual problem."
     vapi.on("local-volume-level", (level) => setLocalAudioLevel(level));
     const onError = (err: unknown) => {
-      const message =
-        err && typeof err === "object" && "message" in err
-          ? String((err as { message?: unknown }).message)
-          : "Something went wrong with the call.";
+      if (!callActiveRef.current) return;
+      callActiveRef.current = false;
+      // SDK payload is { type, error: { message } }, not a top-level message.
+      const e = err as { message?: unknown; error?: { message?: unknown; errorMsg?: unknown } } | null;
+      const detail = e?.error?.message ?? e?.error?.errorMsg ?? e?.message;
+      const message = detail ? String(detail) : "Something went wrong with the call.";
       setMicError(message);
       setState((s) => ({ ...s, mic: "error" }));
     };
@@ -158,6 +176,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
     // video — this is the actual channel a denied mic permission comes
     // through, confirmed by reading the SDK's source rather than guessing.
     vapi.on("camera-error", () => {
+      callActiveRef.current = false;
       setMicError("Microphone access was denied. Please allow microphone permission and try again.");
       setState((s) => ({ ...s, mic: "error" }));
     });
@@ -177,6 +196,8 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
       return;
     }
     set({ mic: "connecting" });
+    callActiveRef.current = true;
+    if (process.env.NODE_ENV !== "production") console.time("[vaani] click → listening");
 
     // Request the mic directly via the standard browser API before handing
     // off to Vapi/Daily. This is the most reliable way to actually trigger
@@ -188,8 +209,12 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
       stream.getTracks().forEach((t) => t.stop()); // Daily opens its own.
     } catch (err) {
       const name = err instanceof DOMException ? err.name : "";
+      // Chrome uses the same NotAllowedError for an OS-level block; only the message differs.
+      const systemBlocked = err instanceof Error && /by system/i.test(err.message);
       const message =
-        name === "NotAllowedError"
+        name === "NotAllowedError" && systemBlocked
+          ? "Your computer is blocking this browser from using the microphone. On Mac: System Settings → Privacy & Security → Microphone → turn this browser on, then quit and reopen the browser."
+          : name === "NotAllowedError"
           ? "Microphone permission is blocked for this site. Click the padlock icon next to the address bar → Site settings → Microphone → Allow, then reload the page. On Mac, also check System Settings → Privacy & Security → Microphone has this browser turned on."
           : name === "NotFoundError"
             ? "No microphone was found on this device."
@@ -198,6 +223,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
               : name === "SecurityError"
                 ? "This page must be loaded over HTTPS (or localhost) to use the microphone."
                 : `Couldn't access the microphone (${name || "unknown error"}).`;
+      callActiveRef.current = false;
       setMicError(message);
       set({ mic: "error" });
       return;
@@ -208,12 +234,14 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
         err && typeof err === "object" && "message" in err
           ? String((err as { message?: unknown }).message)
           : "Couldn't start the call — check your microphone permission.";
+      callActiveRef.current = false;
       setMicError(message);
       set({ mic: "error" });
     });
   };
 
   const stopCall = () => {
+    callActiveRef.current = false;
     vapiRef.current?.stop().catch(() => {});
     set({ mic: null });
   };
@@ -224,7 +252,9 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
   const steps = stepsFor(state);
 
   const showBookLink = state.mode === "named";
-  const showEscalate = !!(k && k.escalate);
+  // A follow-up marked "urgent" (e.g. "They are threatening me") escalates too,
+  // not just the Urgent topic itself.
+  const showEscalate = !!(k && (k.escalate || state.sub === "urgent"));
   const showClose = !!(state.sub && state.sub !== "menu");
   const bannerText = k ? `Topic: ${k.label}` : "Screen time, gaming, pornography, bullying, privacy, incidents, urgent";
   const modeLabel = state.mode ? (anon ? "Anonymous" : "Sharing details") : "Awaiting choice";
@@ -314,10 +344,10 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
           </div>
         </aside>
 
-        <main className="flex min-h-[660px] flex-[6_1_340px] flex-col overflow-hidden rounded-[14px] border border-line bg-surface">
+        <section className="flex min-h-[660px] flex-[6_1_340px] flex-col overflow-hidden rounded-[14px] border border-line bg-surface">
           <div
             className="flex flex-wrap items-center gap-3 border-b border-line px-5.5 py-4.5"
-            style={{ background: k && k.escalate ? "#F4F3EF" : "#FFFFFF" }}
+            style={{ background: showEscalate ? "#F4F3EF" : "#FFFFFF" }}
           >
             <div className="min-w-0">
               <div className="font-heading text-[17px] font-medium">Speak to Vaani</div>
@@ -362,7 +392,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
             </div>
           )}
           {state.mic === "connecting" && (
-            <div className="mx-5.5 mt-6 flex flex-wrap items-center gap-4.5 rounded-xl bg-ink p-5.5 text-white">
+            <div className="mx-5.5 mt-6 flex flex-wrap items-center gap-4.5 rounded-xl bg-ink/70 p-5.5 text-white">
               <div className="grid h-11.5 w-11.5 flex-none animate-pulse place-items-center rounded-full bg-accent">
                 <div className="h-[19px] w-3 rounded-full bg-white" />
               </div>
@@ -382,7 +412,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
             </div>
           )}
           {state.mic === "live" && (
-            <div className="mx-5.5 mt-6 flex flex-wrap items-center gap-4.5 rounded-xl bg-ink p-5.5 text-white">
+            <div className="mx-5.5 mt-6 flex flex-wrap items-center gap-4.5 rounded-xl bg-ink/70 p-5.5 text-white">
               <div className="grid h-11.5 w-11.5 flex-none place-items-center rounded-full bg-accent">
                 <div className="h-[19px] w-3 rounded-full bg-white" />
               </div>
@@ -509,12 +539,12 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
               <div className="flex flex-wrap items-center gap-4 self-stretch rounded-xl border border-line bg-tint p-5">
                 <div className="min-w-[240px] flex-1">
                   <div className="font-heading text-[17px] font-medium">
-                    {anon ? "Nothing was asked of you" : "Saved to your case"}
+                    {anon ? "Nothing was asked of you" : "Nothing from this chat is saved"}
                   </div>
                   <div className="mt-1 text-sm leading-snug text-muted">
                     {anon
                       ? "You gave no name and no number. Screenshot anything you want to keep."
-                      : "A counsellor can pick this up from where you left it."}
+                      : "Email it to yourself below, or book a call back and a counsellor will follow up."}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -559,7 +589,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
               ))}
             </div>
           </div>
-        </main>
+        </section>
       </div>
     </div>
   );

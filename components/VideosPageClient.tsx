@@ -51,7 +51,7 @@ export default function VideosPageClient() {
     <>
       <section className="mx-auto max-w-[1100px] px-4 pt-5 text-center sm:px-12 sm:pt-7">
         <div className="inline-flex items-center gap-2 rounded-lg border border-line bg-tint px-4 py-1.75 text-[13.5px] font-bold">
-          11 videos · Hindi &amp; English · Free
+          {VIDEOS.length} videos · Hindi &amp; English · Free
         </div>
         <h1 className="mt-4.5 font-heading text-[clamp(38px,5.2vw,68px)] font-semibold leading-[1.05] tracking-[-0.02em]">
           Watch and learn

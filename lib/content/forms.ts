@@ -24,13 +24,10 @@ export const AVAIL_OPTS = ["Weekday mornings", "Weekday evenings", "Weekends", "
 
 export const BOOK_TIMES = ["Morning", "Afternoon", "Evening"];
 
-// C3/C4 done (2026-09-18): Supabase tables + RLS exist, and this now points at
-// the real API route. Register and Book use this; the video-request form
-// deliberately stays on the mailto: fallback below — no table was built for
-// it, out of scope for C4.
-export const SUBMIT_ENDPOINT: string | null = "/api/submit";
-// TODO(neil): confirm the kirohelp.com address.
-export const CDC_EMAIL = "hello@kirohelp.com";
+// Register and Book post here. The video-request form deliberately passes
+// null instead and uses the mailto: fallback — no table exists for it.
+export const SUBMIT_ENDPOINT = "/api/submit";
+export const CDC_EMAIL = "kiro.contact11@gmail.com";
 
 // TODO(neil): paste the real chat.whatsapp.com invite link — the source design already
 // carries the real link, ported verbatim below. Typed as `string` (not narrowed to this
