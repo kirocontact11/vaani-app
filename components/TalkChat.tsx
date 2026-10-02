@@ -3,84 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Vapi from "@vapi-ai/web";
-import { KB, PLAN } from "@/lib/content/chat";
-import { VAPI_ASSISTANT_ID } from "@/lib/vapi";
+import { KB } from "@/lib/content/chat";
+import {
+  buildMsgs,
+  escalates,
+  stepsFor,
+  type ChatState,
+  type InitialChatState,
+  type Msg,
+} from "@/lib/content/chat-flow";
+import { CONNECT_TIMEOUT_MS, VAPI_ASSISTANT_ID, classifyCallError, type VapiErrorEvent } from "@/lib/vapi";
 
-type Mode = "anon" | "named" | null;
-type Phase = "gate" | "topics";
-type Mic = "ask" | "connecting" | "live" | "error" | null;
-
-interface ChatState {
-  mode: Mode;
-  phase: Phase;
-  topic: string | null;
-  sub: string | null;
-  mic: Mic;
-}
-
-export interface InitialChatState {
-  mode?: Mode;
-  phase?: Phase;
-  topic?: string | null;
-  mic?: Mic;
-}
-
-interface Msg {
-  text: string;
-  align: "flex-start" | "flex-end" | "center";
-  max: string;
-  bg: string;
-  fg: string;
-  border: string;
-  radius: string;
-}
-
-const STEP_DEFS: [string, string, string][] = [
-  ["1", "Identity choice", "Anonymous, or share details"],
-  ["2", "What is going on", "Seven areas in the knowledge base"],
-  ["3", "Grounded answer", "India-specific, plain language"],
-  ["4", "Escalation", "Helpline, counsellor or report"],
-];
-
-function buildMsgs(s: ChatState): Msg[] {
-  const out: Msg[] = [];
-  const bot = (text: string) =>
-    out.push({ text, align: "flex-start", max: "86%", bg: "#F4F3EF", fg: "#1A1A1A", border: "#E8E6E1", radius: "12px 12px 12px 4px" });
-  const me = (text: string) =>
-    out.push({ text, align: "flex-end", max: "74%", bg: "#2F5D50", fg: "#FFFFFF", border: "#2F5D50", radius: "12px 12px 4px 12px" });
-  const note = (text: string) =>
-    out.push({ text, align: "center", max: "92%", bg: "#FFFFFF", fg: "#6B6B6B", border: "#E8E6E1", radius: "999px" });
-
-  bot(
-    "Hi, I’m Vaani. Ask me about whatever is going on — screens, gaming, bullying, a stranger, an incident at school. First though: do you want to share your details, or stay anonymous?"
-  );
-  if (!s.mode) return out;
-  me(s.mode === "anon" ? "Stay anonymous" : "Share my details");
-  if (s.mode === "anon") {
-    note("Anonymous session started. You have given no name and no number.");
-  } else {
-    note("Want a call back? Share your details on the booking page below — Vaani can still help right now too.");
-  }
-
-  bot("What is going on? Pick whatever is closest.");
-  if (!s.topic) return out;
-  const k = KB[s.topic];
-  me(k.q);
-  bot(k.a);
-  if (s.sub === "plan") {
-    me("Yes, give me that");
-    bot(PLAN.a);
-  }
-  if (s.sub === "anger") {
-    me("He gets angry when I stop him");
-    bot(PLAN.anger);
-  }
-  if (s.sub === "urgent") {
-    me(k.next.find(([, v]) => v === "urgent")?.[0] ?? "This is urgent");
-    bot("Thank you for telling me — you have done nothing wrong. This needs a real person today, so here is who to call right now.");
-  }
-  return out;
-}
+type CallPhase = "idle" | "connecting" | "live";
 
 // Opens the user's own email client with the conversation so far, pre-filled
 // as the body — no backend, no email capture needed. They address it to
@@ -90,19 +24,6 @@ function emailTranscript(msgs: Msg[]) {
   const body = msgs.map((m) => m.text).join("\n\n");
   const subject = "My conversation with Vaani — KIRO";
   location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
-
-function stepsFor(s: ChatState) {
-  const stage = s.phase === "gate" ? 0 : !s.topic ? 1 : KB[s.topic]?.escalate || s.sub === "urgent" ? 3 : 2;
-  return STEP_DEFS.map(([n, t, d], i) => ({
-    n,
-    t,
-    d,
-    bg: i === stage ? "#F4F3EF" : "transparent",
-    fg: i <= stage ? "#1A1A1A" : "#6B6B6B",
-    dot: i <= stage ? "#2F5D50" : "#E8E6E1",
-    dotFg: i <= stage ? "#FFFFFF" : "#6B6B6B",
-  }));
 }
 
 export default function TalkChat({ initial }: { initial: InitialChatState }) {
@@ -117,25 +38,48 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
   const [assistantSpeaking, setAssistantSpeaking] = useState(false);
   const [localAudioLevel, setLocalAudioLevel] = useState(0);
   const vapiRef = useRef<Vapi | null>(null);
-  // Daily fires a trailing "meeting ended" error after every hang-up; errors
-  // outside an active call must not flip the UI to the error panel.
-  const callActiveRef = useRef(false);
+  // The call's real lifecycle. SDK listeners are attached once, so they read
+  // this ref (always current) to decide whether an event still applies to
+  // what the user asked for; `mic` state only drives what's on screen.
+  const callPhaseRef = useRef<CallPhase>("idle");
+  const connectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const set = (patch: Partial<ChatState>) => setState((s) => ({ ...s, ...patch }));
-  const restart = () => {
-    callActiveRef.current = false;
+
+  const stopCall = () => {
+    callPhaseRef.current = "idle";
+    if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+    connectTimerRef.current = null;
     vapiRef.current?.stop().catch(() => {});
+    setAssistantSpeaking(false);
+    setLocalAudioLevel(0);
+    set({ mic: null });
+  };
+  const restart = () => {
+    stopCall();
     setState((s) => ({ ...s, phase: "gate", mode: null, topic: null, sub: null, mic: null }));
   };
 
-  // One Vapi instance for the component's lifetime; listeners are attached
-  // once and read the latest state via refs rather than being re-attached
-  // on every render.
+  // One Vapi instance for the component's lifetime.
   useEffect(() => {
     const key = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
     if (!key) return;
     const vapi = new Vapi(key);
     vapiRef.current = vapi;
+
+    const clearConnectTimer = () => {
+      if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+      connectTimerRef.current = null;
+    };
+    const fail = (message: string) => {
+      callPhaseRef.current = "idle";
+      clearConnectTimer();
+      vapi.stop().catch(() => {});
+      setAssistantSpeaking(false);
+      setLocalAudioLevel(0);
+      setMicError(message);
+      setState((s) => ({ ...s, mic: "error" }));
+    };
 
     // Dev-only: per-stage timings so a slow connect can be measured, not guessed at.
     if (process.env.NODE_ENV !== "production") {
@@ -144,44 +88,63 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
       );
     }
     vapi.on("call-start", () => {
+      // Cancelled, restarted or left while connecting: start() doesn't abort
+      // on its own, so don't let the call go live behind the user's back.
+      if (callPhaseRef.current !== "connecting") {
+        vapi.stop().catch(() => {});
+        return;
+      }
       if (process.env.NODE_ENV !== "production") console.timeEnd("[vaani] click → listening");
+      callPhaseRef.current = "live";
+      clearConnectTimer();
       setMicError("");
       setState((s) => ({ ...s, mic: "live" }));
     });
     vapi.on("call-end", () => {
-      callActiveRef.current = false;
+      // A real failure while connecting always arrives as a fatal `error`
+      // first (which sets the phase to idle), so an end event now is left over
+      // from tearing down a previous call.
+      if (callPhaseRef.current === "connecting") return;
+      callPhaseRef.current = "idle";
+      clearConnectTimer();
       setAssistantSpeaking(false);
       setLocalAudioLevel(0);
-      setState((s) => ({ ...s, mic: null }));
+      // Keep an error panel on screen; otherwise return to typed chat.
+      setState((s) => (s.mic === "error" ? s : { ...s, mic: null }));
     });
     vapi.on("speech-start", () => setAssistantSpeaking(true));
     vapi.on("speech-end", () => setAssistantSpeaking(false));
-    // Real feedback on whether the mic is actually producing signal — without
-    // this there's no way to tell "the assistant can't hear me" apart from
-    // "the mic hardware/permission is the actual problem."
+    // Shows whether the mic is producing signal at all — tells "Vaani can't
+    // hear me" apart from a mic hardware/permission problem.
     vapi.on("local-volume-level", (level) => setLocalAudioLevel(level));
-    const onError = (err: unknown) => {
-      if (!callActiveRef.current) return;
-      callActiveRef.current = false;
-      // SDK payload is { type, error: { message } }, not a top-level message.
-      const e = err as { message?: unknown; error?: { message?: unknown; errorMsg?: unknown } } | null;
-      const detail = e?.error?.message ?? e?.error?.errorMsg ?? e?.message;
-      const message = detail ? String(detail) : "Something went wrong with the call.";
-      setMicError(message);
-      setState((s) => ({ ...s, mic: "error" }));
-    };
-    vapi.on("error", onError);
-    vapi.on("call-start-failed", onError);
-    // Daily's own naming: this fires for audio device failures too, not just
-    // video — this is the actual channel a denied mic permission comes
-    // through, confirmed by reading the SDK's source rather than guessing.
-    vapi.on("camera-error", () => {
-      callActiveRef.current = false;
-      setMicError("Microphone access was denied. Please allow microphone permission and try again.");
-      setState((s) => ({ ...s, mic: "error" }));
+    vapi.on("error", (err: VapiErrorEvent) => {
+      if (callPhaseRef.current === "idle") return;
+      const outcome = classifyCallError(err);
+      if (outcome.kind === "non-fatal") {
+        console.warn("[vaani] non-fatal call error, call continues:", err);
+        return;
+      }
+      if (outcome.kind === "ended") {
+        callPhaseRef.current = "idle";
+        clearConnectTimer();
+        setState((s) => ({ ...s, mic: null }));
+        return;
+      }
+      console.error("[vaani] call failed:", err);
+      fail(outcome.message);
+    });
+    // Daily's naming: this fires for microphone/device failures, not just
+    // cameras (confirmed in the SDK source). The call can't work without audio.
+    vapi.on("camera-error", (err) => {
+      if (callPhaseRef.current === "idle") return;
+      console.error("[vaani] microphone failed:", err);
+      fail("Your microphone couldn't be used for the call. Check it isn't in use by another app, then try again.");
     });
 
     return () => {
+      // start() may still be running; startCall stops it once it returns.
+      callPhaseRef.current = "idle";
+      clearConnectTimer();
       vapi.stop().catch(() => {});
       vapi.removeAllListeners();
       vapiRef.current = null;
@@ -195,8 +158,11 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
       set({ mic: "error" });
       return;
     }
+    // Already connecting or live — e.g. a double tap on Allow.
+    if (callPhaseRef.current !== "idle") return;
+    callPhaseRef.current = "connecting";
+    setMicError("");
     set({ mic: "connecting" });
-    callActiveRef.current = true;
     if (process.env.NODE_ENV !== "production") console.time("[vaani] click → listening");
 
     // Request the mic directly via the standard browser API before handing
@@ -208,6 +174,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((t) => t.stop()); // Daily opens its own.
     } catch (err) {
+      if (callPhaseRef.current !== "connecting") return; // cancelled meanwhile
       const name = err instanceof DOMException ? err.name : "";
       // Chrome uses the same NotAllowedError for an OS-level block; only the message differs.
       const systemBlocked = err instanceof Error && /by system/i.test(err.message);
@@ -223,27 +190,34 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
               : name === "SecurityError"
                 ? "This page must be loaded over HTTPS (or localhost) to use the microphone."
                 : `Couldn't access the microphone (${name || "unknown error"}).`;
-      callActiveRef.current = false;
+      callPhaseRef.current = "idle";
       setMicError(message);
       set({ mic: "error" });
       return;
     }
+    // Cancelled while the browser's permission prompt was open.
+    if (callPhaseRef.current !== "connecting") return;
 
-    vapi.start(VAPI_ASSISTANT_ID).catch((err: unknown) => {
-      const message =
-        err && typeof err === "object" && "message" in err
-          ? String((err as { message?: unknown }).message)
-          : "Couldn't start the call — check your microphone permission.";
-      callActiveRef.current = false;
-      setMicError(message);
+    // start() can hang or return null without any error event; don't leave
+    // the parent watching "Connecting…" forever.
+    if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+    connectTimerRef.current = setTimeout(() => {
+      connectTimerRef.current = null;
+      if (callPhaseRef.current !== "connecting") return;
+      callPhaseRef.current = "idle";
+      vapi.stop().catch(() => {});
+      setMicError("Vaani is taking too long to answer. Please try again in a moment.");
       set({ mic: "error" });
-    });
-  };
+    }, CONNECT_TIMEOUT_MS);
 
-  const stopCall = () => {
-    callActiveRef.current = false;
-    vapiRef.current?.stop().catch(() => {});
-    set({ mic: null });
+    try {
+      await vapi.start(VAPI_ASSISTANT_ID);
+    } catch {
+      // Only input validation throws, and it also emits a fatal `error` event.
+    }
+    // Cancelled, restarted or unmounted while start() was still setting up.
+    // (Cast: TS narrows the ref above and can't see the await changing it.)
+    if ((callPhaseRef.current as CallPhase) === "idle") vapi.stop().catch(() => {});
   };
 
   const k = state.topic ? KB[state.topic] : null;
@@ -252,9 +226,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
   const steps = stepsFor(state);
 
   const showBookLink = state.mode === "named";
-  // A follow-up marked "urgent" (e.g. "They are threatening me") escalates too,
-  // not just the Urgent topic itself.
-  const showEscalate = !!(k && (k.escalate || state.sub === "urgent"));
+  const showEscalate = escalates(state);
   const showClose = !!(state.sub && state.sub !== "menu");
   const bannerText = k ? `Topic: ${k.label}` : "Screen time, gaming, pornography, bullying, privacy, incidents, urgent";
   const modeLabel = state.mode ? (anon ? "Anonymous" : "Sharing details") : "Awaiting choice";

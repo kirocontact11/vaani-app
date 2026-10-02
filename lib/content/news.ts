@@ -17,7 +17,7 @@ export const NEWS: NewsItem[] = [
   {
     date: "23 September 2024",
     source: "Supreme Court of India",
-    href: "https://main.sci.gov.in",
+    href: "https://www.sci.gov.in",
     title: "Just having or watching child abuse material is a crime",
     body: "The Supreme Court made clear the law covers keeping and watching such material, not only sharing it. It matters if you ever find something worrying on your child’s phone.",
   },

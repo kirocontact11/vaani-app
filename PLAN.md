@@ -3,6 +3,204 @@
 *Written 2026-09-23. On approval this is saved as `vaani-app/PLAN.md`. Everything non-Vapi (domain,
 CSP, content TODOs, ownership transfer, phone rehearsal) is parked at the bottom and comes after.*
 
+## ▶ Current status (2026-10-02): tested, deployment-ready, post-deploy tasks
+
+### Test suite (new): `npm test` + `npm run test:smoke`
+There were no automated tests before this. Now (Node's built-in runner, no new dependencies):
+
+| Suite | Covers | Result |
+|---|---|---|
+| `tests/validation.test.ts` | Every form rule: required fields, phone-or-email, consent, length caps, junk, stripped extra fields, trimming; webhook payload shape | ✅ 10/10 |
+| `tests/chat-flow.test.ts` | All 4 "urgent" follow-ups escalate to 1098; ordinary ones don't; every follow-up value is renderable; every `/talk/<slug>` link resolves | ✅ 7/7, 1 todo (per-topic plan answers: client content) |
+| `tests/vapi.test.ts` | Which SDK errors end a call, normal hang-up vs failure, no raw SDK text shown | ✅ 4/4 |
+| `tests/content.test.ts` | Video IDs/links/thumbnails/durations, age filters, topic data | ✅ 5/5 |
+| `tests/smoke.test.ts` | A running site from outside: 21 pages, all internal links, 404s, headers, contact links, robots/sitemap, both APIs refuse bad input. **Never writes.** | ✅ 9/9 against a fresh production build |
+
+**Do the tests actually catch bugs?** Five real bugs from earlier audits were re-introduced one at a
+time; each was caught by the test written for it, then restored.
+
+**Browser-only checks re-run on the refactored code** (production build, faked SDK events): cancel
+races, non-fatal errors, normal hang-up, network drop, mic failure, double tap, leftover events,
+failed start → Try again, and a real click on "Do we have to involve police?" → 1098 panel. All ✅.
+**Still never tested: a real spoken call with the latest code** (needs Neil + a mic).
+
+**Security fix found during this pass: Next.js 16.3.5 → 16.3.8.** A critical advisory published
+after the last audit (GHSA-vcvr-r3jv-pc5j) covers remote code execution in `next/og`'s
+`ImageResponse`, which `app/opengraph-image.tsx` uses. Our usage wasn't exploitable: the advisory
+only affects apps passing attacker-controlled values into the image, and ours has fixed text and the
+logo only. Upgraded anyway (`next` and `eslint-config-next`, exact pins). `npm audit` is back to 0,
+everything above was re-run on the new version, and the share image was checked visually.
+
+**Records corrected:**
+- Vercel needs **4** required settings, not 5: `NEXT_PUBLIC_SUPABASE_ANON_KEY` is never read by the
+  code.
+- The Vercel import is `kirocontact11/vaani-app`, not `neilrojindar/...`.
+- `vaani-app.vercel.app` is **someone else's live site**, so expect a different address.
+- CONTEXT.md now has the voice phase model, the error classification, the 0004/0005 state and the
+  test commands.
+- Supabase's free plan pauses projects after 1 week of inactivity (Supabase pricing page), and
+  Vercel's Hobby plan is non-commercial only (Vercel docs). Both are in the table below.
+
+### Before you deploy (≈15 min, must be done first)
+1. Supabase SQL Editor: run `0004_experts_phone_optional.sql`, then `0005_drop_anon_insert.sql`.
+   Live check 2026-10-02: **neither has run yet.**
+2. Supabase → Authentication → Sign In / Providers → turn **off** "Allow new users to sign up"
+   (still on).
+3. `git push`: GitHub is missing the audit commit and everything since.
+4. Vercel, signed in as **kiro.contact11@gmail.com** via "Continue with GitHub" (the
+   `kirocontact11` account) → import `kirocontact11/vaani-app` → add these settings → Deploy:
+   - `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_VAPI_PUBLIC_KEY`,
+     `VAPI_WEBHOOK_SECRET` (from `.env.local`)
+   - `NEXT_PUBLIC_SITE_URL` = the new `https://….vercel.app` address, **until `kirohelp.com` points
+     at Vercel**. Today `kirohelp.com` doesn't load at all, so share previews, the sitemap and
+     canonical links would point at a dead site. This value is read at build time, so redeploy
+     after changing it.
+5. Run the smoke test against the live address:
+   `BASE_URL=https://<address> VAPI_WEBHOOK_SECRET=<secret> npm run test:smoke`
+
+### After deploy: every remaining task
+
+| # | Task | Why | Who | Account |
+|---|---|---|---|---|
+| 1 | Run the smoke test against the live site | Proves pages, headers and both APIs work in production | Claude | — |
+| 2 | Re-run the database attack checks on production (anon read → `[]`, anon insert → refused) | Confirms 0005 and RLS on the live setup | Claude | Supabase (kiro.contact11) |
+| 3 | Vapi dashboard: Server URL = `https://<address>/api/webhooks/vapi`, Bearer credential = `VAPI_WEBHOOK_SECRET`, server messages = only `end-of-call-report` | Without it, no call is ever logged | Neil, in the client's Vapi | Vapi (client's; kiro.contact11 not connected, per your choice) |
+| 4 | One real call on the live `/talk/voice`; test hang-up, Vaani ending the call, and Cancel while connecting | The only part never tested with a real mic | Neil (Claude checks the `calls` row) | — |
+| 5 | Compare a real call's stored `raw` payload with what the code expects | Needed before topic/escalation tagging | Claude | Supabase |
+| 6 | Real-phone test: 1098 button dials, voice on mobile data, forms, WhatsApp share preview | Desktop can't test `tel:` or mobile mic | Neil | — |
+| 7 | Upgrade Supabase to Pro ($25/mo), or accept the risk | Free projects **pause after 1 week with no activity**; the forms then fail until someone restores it | Neil / client | Supabase (kiro.contact11) |
+| 8 | Upgrade Vercel to Pro ($20/user/mo) | Hobby is non-commercial only, and keeps just 1 hour of logs | Neil / client | Vercel (kiro.contact11) |
+| 9 | Point `kirohelp.com` at Vercel, then set `NEXT_PUBLIC_SITE_URL` back to `https://kirohelp.com` and redeploy | Real domain; correct previews and SEO | Neil (DNS is at the client's registrar) | Vercel (kiro.contact11); domain (client) |
+| 10 | Update the Vapi Server URL to the `kirohelp.com` address | The webhook follows the domain | Neil | Vapi (client's) |
+| 11 | Decide who reads submissions, and how. Today nobody is notified; rows just appear in Supabase. Either check daily, or set up Resend under kiro.contact11 (`RESEND_API_KEY`, `NOTIFY_EMAIL`, and change the sender from `onboarding@resend.dev` to a verified kirohelp.com address) | A booking nobody sees is a parent nobody calls back | Neil / client | Resend (kiro.contact11) |
+| 12 | Content-Security-Policy, built from a real call's network log | Last missing security header; needs #4 first | Claude | — |
+| 13 | Client content: per-topic chat answers, privacy policy + consent on `/book`, real news article links, the two placeholder cards, the eSafety YouTube link, WhatsApp link and one video ID | Shouldn't launch publicly without the first two | Client → Claude adds | — |
+| 14 | Decisions: `calls` retention period, recording on/off, the "escalated" rule | DPDP data minimisation | Client | — |
+| 15 | Ask the client to restrict the Vapi public key to the site's domains | Stops others running up the call bill | Client | Vapi (client's) |
+| 16 | Watch for 429s ("too many requests") from real users | 5 forms per 10 min per IP; Indian mobile networks share IPs between many users | Neil (Vercel logs) | Vercel (kiro.contact11) |
+| 17 | Handover: give the client the kiro.contact11 login, then rotate `SUPABASE_SERVICE_ROLE_KEY` and `VAPI_WEBHOOK_SECRET` | Only the client should hold working secrets | Neil + client | All |
+
+**Account status:** GitHub ✅ `kirocontact11` (verified: the remote points there). Supabase ✅
+`kiro.contact11@gmail.com's Org` (verified from your dashboard screenshot; the project's own keys
+can't show the owning org). Site contact email ✅ `kiro.contact11@gmail.com`. Vercel ⏳ not
+created yet. Resend ⏳ only when email is switched on. Vapi stays on the client's account (your
+decision on 2026-09-27). Git commits are still authored as `neilrojindar@gmail.com`, the local git
+identity, which only you can change.
+
+---
+
+## Vapi integration audit + fix plan (2026-09-28)
+
+Audited against the SDK's shipped source (`@vapi-ai/web@2.7.0`, `@daily-co/daily-js`), not memory.
+
+| # | Bug | Evidence in SDK source | Fix |
+|---|---|---|---|
+| 1 | Cancel during "Connecting…" doesn't stop the call: it goes live anyway, mic on and billed | `stop()` only destroys an existing call object; `start()` carries on after its awaits | Track the call phase; if `start()` resolves or `listening` arrives after a cancel, stop the call |
+| 2 | Cancel while the browser's mic prompt is open still starts the call | We `await getUserMedia` then call `start()` unconditionally | Re-check the phase after the prompt resolves |
+| 3 | Non-fatal SDK errors show "Couldn't connect" while the call keeps running; "I'll type instead" then leaves the mic live | 4 error types are labelled "non-critical, the call continues" (audio-observer, audio-processing incl. Krisp, recovery, video-recording) | Only 6 fatal types end the call (`validation`, `daily-call-object-creation`, `daily-call-join`, `start-method`, `daily`, `reconnect`); others are logged |
+| 4 | A parent can see "[object Object]" or raw technical text | `serializeError` sets `message` to Daily's nested error *object* | Friendly messages; raw detail goes to the console |
+| 5 | A normal ending (Vaani hangs up, room deleted) can show the error panel | Daily reports ejection as a fatal `error` with `error.type: "ejected"` | Treat `ejected` as a normal end → back to chat |
+| 6 | A real mid-call error is wiped out by the `call-end` that follows | Daily sends `error` then `left-meeting` | `call-end` leaves an error panel on screen |
+| 7 | A mic failure (`camera-error`) shows the error but leaves the call running without audio | Our handler never stops the call | Stop the call |
+| 8 | Double-tapping Allow starts two start attempts | No guard | Ignore taps while connecting or live |
+| 9 | "Connecting…" can hang forever | `start()` can return `null` without an error (already-started path); nothing times out | 30 s timeout → friendly error |
+| 10 | Leaving the page mid-connect can join a call nobody's watching | Same race as #1 | Same phase guard on unmount |
+| 11 | Webhook could store duplicates if Vapi ever re-sends a report | Retry behaviour is undocumented | Skip a `call.id` that's already stored |
+
+Also: drop the `call-start-failed` listener. It fires alongside `error: start-method-error` with less detail, and caused the real reason to be lost.
+
+**Status: all 11 fixed and verified (2026-09-28).** The real component was driven in the browser
+with the mic prompt and Vapi's network calls (`start`/`stop`) replaced by instrumented fakes,
+firing the exact event sequences the SDK source produces:
+
+| # | Scenario | Result |
+|---|---|---|
+| 1 | Cancel, then `start()` resolves, then "listening" | Stopped 3 times; screen never goes live ✅ |
+| 2 | Cancel while the mic prompt is open | `start()` never called ✅ |
+| 3 | Krisp and audio-observer errors while live | Still live; no stop ✅ |
+| 4 | Network drop mid-call | "The connection dropped. Check your internet and try again." ✅ |
+| 5 | Vaani hangs up (`ejected` + `call-end`) | Back to chat, "Talk to Vaani" shown ✅ |
+| 6 | Fatal error, then `call-end` | Error panel stays ✅ |
+| 7 | Mic device failure while connecting | Clear message; call stopped ✅ |
+| 8 | Double tap on Allow | Exactly one `start()` ✅ |
+| 9 | `start()` hangs | Still connecting at 21 s; stopped with a message at 31 s ✅ |
+| 10 | Leave the page mid-connect | Stopped on unmount, and again when `start()` resolved ✅ |
+| 11 | Same report delivered twice | `duplicate: true`, one row; a report with no call ID still saves ✅ (test rows deleted) |
+| — | Leftover `call-end` while connecting; errors after pressing Stop; failed start then "Try again" | Ignored / ignored / restarts cleanly ✅ |
+
+Type-check, lint and a production build all pass. **Still untested: a real spoken call with these
+changes.** Next time Neil calls in Chrome, check: normal hang-up, Vaani hanging up, and Cancel
+during "Connecting…".
+
+---
+
+## Pre-launch security audit + fix plan (2026-09-27)
+
+How it was tested: a production build (`next build` + `next start`) attacked over HTTP; the live
+Supabase project probed from an outsider's position (public anon key only); the client JS bundle
+scanned for every secret in `.env.local`; every page and link crawled; all main pages measured at
+phone width; `npm audit`.
+
+**What held up:**
+- `npm audit`: 0 vulnerabilities.
+- No server secret (service-role key, webhook secret) in the browser bundle; no source maps shipped.
+- All 5 security headers present.
+- Webhook rejects wrong method (405), no auth (401) and wrong secret (401).
+- Forms reject junk JSON, unknown kinds and oversized fields (400). Extra fields are **stripped, not
+  rejected**: a valid booking that also sent `__proto__`, `status: "closed"` and a chosen `id` was
+  saved with a random ID and `status: "new"`, and the server stayed healthy. So nobody can set
+  fields they shouldn't.
+- Text is stored as typed. A valid booking with `<script>` as the name is accepted (201). That's
+  safe because nothing on the site displays submissions, React escapes text by default, and the
+  notification email is plain text. **If an admin page that shows submissions is ever built, it
+  must not render them as HTML.**
+- No XSS through `?tab=` or `/talk/<slug>`; path traversal and `/.env.local` both 404.
+- Anon can read nothing from any table (`200 []`), and can't write to `calls`. No storage buckets.
+  (Signed-in users would get the same denial: the only policies in the project are the two
+  anon-insert ones. This comes from the migrations, not a live test, since testing it means creating
+  an account.)
+- The anon key itself is in **no** published place: not in the browser bundle, the prerendered
+  pages, or any commit in git history. No `.env` file other than `.env.example` has ever been
+  committed.
+- Clickjacking blocked: the site refuses to load in a frame, even from itself.
+- All 21 pages and 25 internal links return 200; all 11 YouTube videos are live and public.
+- No horizontal overflow on any main page at 375px (phone width).
+- The rate limiter *can* be bypassed locally by faking `X-Forwarded-For`, but **not on Vercel**,
+  which overwrites that header to prevent spoofing (per Vercel's request-headers docs).
+
+**Found, and the fix:**
+
+| # | Severity | Finding | Fix | Who |
+|---|---|---|---|---|
+| 1 | Medium (defence in depth) | With the anon key, anyone can insert rows straight into `experts` and `appointments` through Supabase's REST API. That skips all validation, length limits and rate limiting. Proven on **both** tables with test rows (deleted). Not exploitable today: the key isn't published anywhere (see above). But Supabase treats that key as public, so this shouldn't depend on it staying hidden. Nothing in the app uses these policies; every real write goes through `/api/submit` with the service-role key. | Migration `0005` drops the two anon insert policies. | Claude writes, **Neil runs** |
+| 2 | **High** | Migration `0004` was never run: email-only registrations still fail. | Run it. | **Neil** |
+| 3 | Medium | Footer "1098 Childline" link is **404**. | → `childlineindia.org/a/p/contact-us` (verified 200). | Claude |
+| 4 | Medium | Supreme Court news link (`main.sci.gov.in`) doesn't connect. | → `www.sci.gov.in` (verified 200). | Claude |
+| 5 | Medium | Webhook saves zod's *parsed* payload as `raw`, and zod drops every unknown field. So the full Vapi report (analysis, recording URL, etc.) is lost, and Stage 6's "fill in later from `raw`" can't work. | Save the original request body. | Claude |
+| 6 | Low (defence in depth) | Supabase Auth has **public sign-ups on**. The site has no logins, but anyone holding the anon key can create accounts and make the project send confirmation emails to any address. | Dashboard → Authentication → Sign In / Providers → turn off "Allow new users to sign up". | **Neil** |
+| 7 | Low | Webhook compares the secret with `===`, which can leak timing information. | Constant-time comparison. | Claude |
+| 8 | Low | `X-Powered-By: Next.js` header tells attackers the framework. | `poweredByHeader: false`. | Claude |
+| 9 | Low | Rate-limit memory is never pruned, and its reliance on Vercel's header overwrite isn't documented. | Prune old entries; add a comment. | Claude |
+| 10 | Blocker for deploy | The audit commit (`26923ea`) isn't pushed to GitHub, so Vercel would deploy the old, buggy code. | Push after these fixes. | **Neil approves** |
+| 11 | Advice (client) | The Vapi public key is in the browser bundle by design, so anyone can copy it and start calls billed to the client. | Client restricts the key to allowed origins in the Vapi dashboard. Vapi is out of scope for us. | Client |
+| — | Deferred | No Content-Security-Policy yet. | Unchanged: build it from a real voice call's network log (After-Vapi item 1). | Later |
+
+**Fix status (2026-09-27), re-tested against a fresh production build:**
+- ✅ **#3 Childline link**: now in the rendered footer.
+- ✅ **#4 Supreme Court link**: new URL in the bundle, old one gone.
+- ✅ **#5 full payload**: a test report kept `analysis` and `recordingUrl` in `raw` (row deleted).
+- ✅ **#7 constant-time secret**: no auth, wrong secret and wrong scheme → 401; Bearer and legacy
+  header → 200.
+- ✅ **#8 `X-Powered-By`**: gone.
+- ✅ **#9 rate limiter**: still returns 429 after 5 attempts. 5,100 distinct IPs pushed it past the pruning threshold with no errors. (Nothing was stale yet, so the delete branch didn't remove anything; that part is verified by reading the code only.)
+- ✅ Type-check, lint and a clean build all pass.
+- ⏳ **#1** Neil runs `0005_drop_anon_insert.sql`. Then Claude re-runs the anon-insert attack, which
+  should now fail with 401.
+- ⏳ **#2** Neil runs `0004`; **#6** Neil turns off Supabase sign-ups; **#10** Neil OKs the push.
+- ⏳ **#11** Suggest to the client: restrict the Vapi public key to the site's domains.
+
+---
+
 ## Status at a glance (updated 2026-09-23, after a full line-by-line audit)
 
 **The code is feature-complete.** Every route, form, API and the voice widget is built. A full audit
@@ -16,7 +214,7 @@ Nothing is left to *build* without new input. What remains needs a person, an ac
       then, any psychologist or centre that registers with only an email gets an error and is lost.
 - [ ] Re-test the voice call in Chrome: does hang-up return to chat? Paste the `[vaani]` timings.
 - [ ] Stage 2: Vercel deploy → Stage 3: Vapi dashboard (needs the client's Vapi login).
-- [ ] Commit the audit changes once you've checked them (nothing is committed yet).
+- [x] Commit the audit changes (done 2026-09-27 as `26923ea`, not yet pushed).
 
 **Client — content and decisions the site can't ship without**
 - [ ] **Chat follow-up answers are wrong for 5 of 7 topics.** Every "plan" button (e.g. Gaming → "Can
@@ -29,7 +227,8 @@ Nothing is left to *build* without new input. What remains needs a person, an ac
       HC item promises "a simple summary" that doesn't exist (`lib/content/news.ts`).
 - [ ] **Placeholders:** two "More examples coming" cards on `/community`; "See all videos on YouTube"
       opens a search for the Australian eSafety Commissioner (`components/VideosPageClient.tsx`).
-- [ ] The three `TODO(neil)` items: `hello@kirohelp.com`, the WhatsApp link, one video ID.
+- [ ] The two remaining `TODO(neil)` items: the WhatsApp link, one video ID. (Contact email is
+      settled: `kiro.contact11@gmail.com`.)
 - [ ] `calls` retention period, call recording on/off, and the `topic`/`escalated` rule (Stages 5–6).
 
 **When email is switched on (not before)**
@@ -90,8 +289,8 @@ checks, logs, database checks and writing down findings.
 
 ## Stage 2: Minimum deploy for a public webhook URL (Neil clicks, Claude checks)
 
-1. Neil: Vercel → sign in with GitHub → import `neilrojindar/vaani-app` → add the 5 env vars from
-   `.env.local` (Supabase ×3, `NEXT_PUBLIC_VAPI_PUBLIC_KEY`, `VAPI_WEBHOOK_SECRET`) → Deploy.
+1. *(Superseded: see "Before you deploy" at the top.)* Neil: Vercel as kiro.contact11 → import
+   `kirocontact11/vaani-app` → add the 4 required settings → Deploy.
    Paste the `*.vercel.app` URL back here.
 2. Claude, against the live URL:
    - `curl` auth checks on `/api/webhooks/vapi`: no header → 401, wrong secret → 401, valid secret
@@ -141,7 +340,7 @@ Now that the real payload is known:
    is on in the client's assistant, the stored URL points to audio of a parent talking about their
    child. **Decision for Neil/client:** keep the URL, strip it before saving, or turn recording off
    in Vapi. This is a DPDP data-minimisation question.
-2. Add a retention purge for `calls`: new `supabase/migrations/0005_calls_retention.sql` copying the
+2. Add a retention purge for `calls`: new `supabase/migrations/0006_calls_retention.sql` copying the
    `cron.schedule` pattern at `0001_init.sql:84-98`. The retention period comes from the client.
    Neil runs it; Claude checks `select * from cron.job`.
 
@@ -153,7 +352,7 @@ Vapi's model fills it in after each call using the client's own rules. There's s
 rule on our side.
 1. Neil/client agree on the schema and on what "escalated" means (client's decision, since it's
    about child safety). Neil adds it in the dashboard.
-2. Claude: migration `0006` adds nullable `topic` and `escalated` columns; the route maps
+2. Claude: migration `0007` adds nullable `topic` and `escalated` columns; the route maps
    `message.analysis.structuredData` using the location found in Stage 4.2; the zod schema gets
    those fields as optional.
 3. Every call is already saved in full in `raw`, so older calls can be filled in later with one SQL
@@ -173,8 +372,8 @@ webhook. Findings go into `PLAN.md` as they happen.
 
 - `vaani-app/PLAN.md`: this plan (new)
 - `components/TalkChat.tsx`: only if Stage 1 turns up a bug
-- `supabase/migrations/0005_calls_retention.sql`: new (Stage 5)
-- `supabase/migrations/0006_calls_analysis.sql` and `app/api/webhooks/vapi/route.ts`: only after
+- `supabase/migrations/0006_calls_retention.sql`: new (Stage 5)
+- `supabase/migrations/0007_calls_analysis.sql` and `app/api/webhooks/vapi/route.ts`: only after
   Stage 6 sign-off
 
 ## After Vapi is done (parked, in order)

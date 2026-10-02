@@ -16,7 +16,7 @@ export default function SiteFooter() {
       </p>
       <div className="flex flex-wrap justify-center gap-5 text-[15px] font-bold">
         <a href="mailto:kiro.contact11@gmail.com">kiro.contact11@gmail.com</a>
-        <a href="https://www.childlineindia.org/a/contact" target="_blank" rel="noopener">
+        <a href="https://childlineindia.org/a/p/contact-us" target="_blank" rel="noopener">
           1098 Childline
         </a>
         <a href="https://cybercrime.gov.in" target="_blank" rel="noopener">

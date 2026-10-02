@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { resolveTopicSlug } from "@/lib/content/chat";
-import TalkChat, { type InitialChatState } from "@/components/TalkChat";
+import TalkChat from "@/components/TalkChat";
+import type { InitialChatState } from "@/lib/content/chat-flow";
 
 export const metadata: Metadata = {
   title: "Speak to Vaani — KIRO",

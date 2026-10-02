@@ -31,8 +31,8 @@ retention purge, and why call transcripts are locked down harder than anything e
 | **Build plan** (long-form history) | `~/.claude/plans/users-neilrojindar-downloads-2026-09-13-vectorized-hummingbird.md` |
 | **Design source of truth** | `kiro-online-safety-ui-mockups/project/KIRO Site - Final.html` |
 | **Original build plan PDF** | `~/Downloads/2026-09-13-vaani-kiro-plan.pdf` |
-| **GitHub** | `github.com/neilrojindar/vaani-app` (private, **Neil's personal account**) |
-| **Supabase** | Project `KIRO`, ref `tohbwflygqqqnhifvphw`, region Mumbai `ap-south-1` (**Neil's personal account**) |
+| **GitHub** | `github.com/kirocontact11/vaani-app` (private, project account **kiro.contact11@gmail.com**, moved 2026-09-27) |
+| **Supabase** | Project `KIRO`, ref `tohbwflygqqqnhifvphw`, region Mumbai `ap-south-1` (org owned by **kiro.contact11@gmail.com**, moved 2026-09-27; same URL and keys) |
 | **Vapi assistant** | "Keep It Real Parent Intake", id `ca7dccb0-96c6-4c0d-bacf-69322ac70096` (**client's own account**) |
 | **Production domain** | `kirohelp.com` (confirmed 2026-09-18) |
 | **Secrets** | `.env.local` in the app dir — gitignored, never committed |
@@ -117,29 +117,38 @@ components/
 
 lib/
   site.ts                 SITE_URL constant (everything SEO reads from this one place)
-  vapi.ts                 VAPI_ASSISTANT_ID
+  vapi.ts                 VAPI_ASSISTANT_ID + classifyCallError() (which SDK errors end a call)
+  validation.ts           zod rules for /api/submit and the Vapi webhook (one source for tests too)
   supabase/server.ts      supabaseAdmin() — service-role, server-only
   content/{topics,chat,forms,videos,news}.ts   all copy/data
+  content/chat-flow.ts    pure typed-chat logic: buildMsgs, stepsFor, escalates()
+
+tests/                    node --test, zero extra dependencies (see §12)
+  validation / chat-flow / vapi / content .test.ts   unit tests (`npm test`)
+  smoke.test.ts           checks a RUNNING site from outside, never writes (`npm run test:smoke`)
 
 supabase/migrations/      0001_init.sql, 0002_drop_redundant_person_column.sql, 0003_calls.sql,
-                          0004_experts_phone_optional.sql (written 2026-09-23 — NOT YET RUN, see PLAN.md)
+                          0004_experts_phone_optional.sql, 0005_drop_anon_insert.sql (both NOT YET RUN, see PLAN.md)
 ```
 
-**23 routes total.** `npx tsc --noEmit && npx eslint . && npm run build` is clean.
+**23 routes total.** `npx tsc --noEmit && npx eslint . && npm test && npm run build` is clean.
 
 ---
 
 ## 6. Database (Supabase Postgres)
 
-Three tables. Migrations 0001–0003 have been run by Neil in the Supabase SQL Editor, and live
-schemas were verified column-by-column against the migration files — no drift. **0004 (make
-`experts.phone` optional, require phone *or* email) is written but not yet run** — until it is,
-email-only registrations fail.
+Three tables. Migrations 0001–0003 have been run in the Supabase SQL Editor, and live schemas were
+verified column-by-column against the migration files — no drift. **0004 and 0005 are written but
+not yet run** (checked live 2026-10-02):
+- **0004** makes `experts.phone` optional and requires phone *or* email. Until it runs, email-only
+  registrations fail.
+- **0005** drops the two anon-insert policies. Until it runs, anyone holding the anon key can write
+  straight into `experts`/`appointments` (proven, test rows deleted).
 
 | Table | Source | RLS |
 |---|---|---|
-| `experts` (21 cols) | `/register`, both tabs, discriminated by `kind` (`psych`/`cdc`) | anon **insert only**, no select policy |
-| `appointments` (9 cols) | `/book` | anon **insert only**, no select policy |
+| `experts` (21 cols) | `/register`, both tabs, discriminated by `kind` (`psych`/`cdc`) | anon insert only *until 0005*, then **zero policies** |
+| `appointments` (9 cols) | `/book` | anon insert only *until 0005*, then **zero policies** |
 | `calls` (6 cols) | Vapi webhook | **RLS on, zero policies** — not even anon insert |
 
 **The RLS model, and why**: the anon key ships inside the browser bundle by definition, so it must
@@ -148,7 +157,7 @@ RLS. `calls` is stricter still — nothing client-side should ever touch call tr
 
 **Verification that this actually works** (re-run this after deploy):
 anon `select` on each table returns `200` with `[]` (not an error); anon `insert` on `calls` is
-rejected.
+rejected, and on `experts`/`appointments` too once 0005 has run.
 
 **Retention**: 12-month purge on `experts` and `appointments` via `pg_cron`, daily at 03:00 UTC.
 Client-confirmed policy. Note `calls` has **no** purge yet — worth raising.
@@ -167,10 +176,19 @@ prompt lives in the client's Vapi dashboard, not in this repo.
 - `type Mic = "ask" | "connecting" | "live" | "error" | null` — every state keeps a working path back
   to typed chat.
 - One `Vapi` instance created in a `useEffect`, listening to: `call-start`, `call-end`,
-  `speech-start`, `speech-end`, `local-volume-level`, `error`, `call-start-failed`, and **`camera-error`**.
+  `speech-start`, `speech-end`, `local-volume-level`, `error`, and **`camera-error`**.
+- **A call phase (`idle` → `connecting` → `live`) is tracked in a ref**, and every SDK event checks
+  it. That's what makes Cancel/restart/leaving the page actually stop a call: the SDK's `stop()` does
+  *not* abort a `start()` already in progress, so a cancelled call would otherwise go live anyway.
+- **Not every `error` event is a failure** (`lib/vapi.ts` `classifyCallError`). Only 6 SDK error
+  types end a call; the others (audio observer, Krisp noise-cancellation, recording setup) are
+  "non-critical, the call continues" per the SDK source. Daily's `ejected` error is how a **normal**
+  hang-up by Vaani arrives. Parents only ever see plain-language messages; raw SDK detail goes to the
+  console.
 - **`camera-error` is the non-obvious one**: despite the name (it's Daily's naming, which Vapi wraps),
-  that's the event that fires for microphone/device failures. Missing it left the UI stuck on
-  "Connecting…" forever. Found by reading `node_modules/@vapi-ai/web/dist/vapi.js` directly.
+  that's the event that fires for microphone/device failures. It now stops the call.
+- "Connecting…" times out after 30 s with a message; a double tap on Allow can't start two calls.
+- All of the above found by reading `node_modules/@vapi-ai/web/dist/vapi.js` directly.
 - Before `vapi.start()`, the code calls `navigator.mediaDevices.getUserMedia({ audio: true })`
   **directly** — the standard way to trigger the browser's real permission prompt — and maps each
   `DOMException` name to a specific message (`NotAllowedError`, `NotFoundError`, `NotReadableError`,
@@ -267,7 +285,7 @@ NOT the `microphone=()` in Next's own docs example** — copying the docs verbat
 
 ### 🔴 C10 — Deploy to Vercel (current task, in progress)
 Neil chose this path on 2026-09-22 to unblock everything Vapi-related at once.
-1. Sign in to Vercel with GitHub → import `neilrojindar/vaani-app` (Next.js auto-detected).
+1. Sign in to Vercel as **kiro.contact11@gmail.com** ("Continue with GitHub" → the `kirocontact11` account) → import `kirocontact11/vaani-app`. Note: `vaani-app.vercel.app` is already taken by an unrelated site, so Vercel will assign a different address.
 2. Add the 5 required env vars from §8 in Vercel's dashboard — **never in the repo**.
 3. Deploy, confirm HTTPS.
 4. Point `kirohelp.com` at Vercel (needs registrar/DNS access — unknown where DNS is hosted; **ask Neil**).
@@ -294,7 +312,7 @@ Claude never handles passwords or account credentials; Neil signs up himself and
   that's true of every website. Needs a real phone to confirm, not a code change.
 
 ### 🟡 Content confirmations (all are `TODO(neil)` in code)
-- `lib/content/forms.ts:32` — does `hello@kirohelp.com` exist, and who reads it?
+- ~~Contact email~~ — settled 2026-09-27: `kiro.contact11@gmail.com`.
 - `lib/content/forms.ts:35` — is the WhatsApp invite link still valid?
 - `lib/content/videos.ts:73` — final sign-off on one video ID (verified live and on-topic, but the
   client's call whether they meant a different one).
@@ -329,9 +347,20 @@ Claude never handles passwords or account credentials; Neil signs up himself and
 
 ### Standing verification, after any meaningful change
 ```bash
-npx tsc --noEmit && npx eslint . && rm -rf .next && npm run build
+npx tsc --noEmit && npx eslint . && npm test && rm -rf .next && npm run build
 ```
 …then a **live browser check of the thing that changed**.
+
+### Tests (added 2026-10-02)
+- `npm test`: unit tests for form/webhook validation, the typed-chat escalation path, voice error
+  handling and content data. Uses Node's built-in runner (Node 24 runs `.ts` directly), so no test
+  framework to install. Each test was checked by re-introducing the bug it guards against and
+  confirming it fails.
+- `BASE_URL=<site> VAPI_WEBHOOK_SECRET=<secret> npm run test:smoke`: checks a running site from
+  outside: every page, every internal link, headers, 404s, and that both APIs refuse bad input.
+  **Never writes to the database**, so it's safe to run against production after every deploy.
+- Not automated: the voice call itself (needs a real mic) and the browser-side call lifecycle. Those
+  were verified by driving the real component with faked SDK events; see PLAN.md.
 
 ### Environment gotchas
 - **This network blocks non-standard outbound ports.** Confirmed twice: SSH :22 (worked around by

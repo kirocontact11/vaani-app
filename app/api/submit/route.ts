@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { submitSchema } from "@/lib/validation";
 
 // ponytail: in-memory sliding window, per server instance — resets on cold
 // start and isn't shared across instances. Fine for current low-traffic
@@ -11,78 +11,26 @@ const hits = new Map<string, number[]>();
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
+  // Drop stale entries now and then so the map can't grow without bound.
+  if (hits.size > 5000) {
+    for (const [key, times] of hits) if (now - times[times.length - 1] >= RATE_WINDOW_MS) hits.delete(key);
+  }
   const recent = (hits.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
   recent.push(now);
   hits.set(ip, recent);
   return recent.length > RATE_LIMIT;
 }
 
-// Length caps keep one request from storing megabytes of text; generous
-// enough that no real form entry comes near them.
-const required = z.string().trim().min(1).max(200);
-const optional = z.string().trim().max(200).optional().default("");
-const longText = z.string().trim().max(5000).optional().default("");
-const choices = z.array(z.string().max(100)).max(20).optional().default([]);
-
-const phoneOrEmail = (v: { phone: string; email: string }) => Boolean(v.phone || v.email);
-
-const psychSchema = z
-  .object({
-    kind: z.literal("psych"),
-    pname: required,
-    qualification: required,
-    license: required,
-    years: optional,
-    specs: choices,
-    avail: choices,
-    langs: optional,
-    city: required,
-    phone: optional,
-    email: optional,
-    pconsent: z.literal(true),
-  })
-  .refine(phoneOrEmail, { message: "phone or email required" });
-
-const cdcSchema = z
-  .object({
-    kind: z.literal("cdc"),
-    centre: required,
-    person: required,
-    role: required,
-    services: choices,
-    ages: choices,
-    langs: optional,
-    city: required,
-    area: optional,
-    phone: optional,
-    email: optional,
-    site: optional,
-    note: longText,
-    consent: z.literal(true),
-  })
-  .refine(phoneOrEmail, { message: "phone or email required" });
-
-const bookSchema = z.object({
-  kind: z.literal("book"),
-  bname: required,
-  bage: required,
-  bcity: required,
-  bphone: required,
-  blang: optional,
-  bwhat: longText,
-  btime: choices,
-});
-
-const bodySchema = z.discriminatedUnion("kind", [psychSchema, cdcSchema, bookSchema]);
-
 export async function POST(req: NextRequest) {
+  // Trustworthy on Vercel only: it overwrites any client-sent X-Forwarded-For
+  // to prevent spoofing. Behind any other host this header can be faked.
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   if (isRateLimited(ip)) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const json = await req.json().catch(() => null);
-  const parsed = bodySchema.safeParse(json);
+  const parsed = submitSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid submission" }, { status: 400 });
   }

@@ -1,19 +1,16 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { vapiMessageSchema } from "@/lib/validation";
 
-// Vapi's server URL receives many message types (status-update, transcript,
-// speech-update, hang, end-of-call-report, ...) at the same endpoint — only
-// end-of-call-report is logged here; everything else is safely acknowledged
-// and ignored, not treated as an error.
-const bodySchema = z.object({
-  message: z.object({
-    type: z.string(),
-    endedReason: z.string().optional(),
-    call: z.object({ id: z.string().optional() }).optional(),
-    artifact: z.object({ transcript: z.string().optional() }).optional(),
-  }),
-});
+// Constant-time: hashing makes both sides the same length, and timingSafeEqual
+// doesn't leak how many characters matched.
+function secretMatches(given: string | null, secret: string): boolean {
+  if (!given) return false;
+  const a = createHash("sha256").update(given).digest();
+  const b = createHash("sha256").update(secret).digest();
+  return timingSafeEqual(a, b);
+}
 
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.VAPI_WEBHOOK_SECRET;
@@ -21,13 +18,9 @@ function isAuthorized(req: NextRequest): boolean {
   // everything as an unprotected open endpoint.
   if (!secret) return false;
 
-  const authHeader = req.headers.get("authorization");
-  if (authHeader === `Bearer ${secret}`) return true;
-
-  const legacyHeader = req.headers.get("x-vapi-secret");
-  if (legacyHeader === secret) return true;
-
-  return false;
+  const auth = req.headers.get("authorization");
+  const bearer = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+  return secretMatches(bearer, secret) || secretMatches(req.headers.get("x-vapi-secret"), secret);
 }
 
 export async function POST(req: NextRequest) {
@@ -36,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const json = await req.json().catch(() => null);
-  const parsed = bodySchema.safeParse(json);
+  const parsed = vapiMessageSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
@@ -47,11 +40,20 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = supabaseAdmin();
+  // Vapi doesn't document whether it re-sends reports; a repeat must not
+  // store the same transcript twice.
+  const callId = message.call?.id;
+  if (callId) {
+    const { data: existing } = await supabase.from("calls").select("id").eq("vapi_call_id", callId).limit(1);
+    if (existing?.length) return NextResponse.json({ ok: true, duplicate: true });
+  }
   const { error } = await supabase.from("calls").insert({
     vapi_call_id: message.call?.id ?? null,
     ended_reason: message.endedReason ?? null,
     transcript: message.artifact?.transcript ?? null,
-    raw: message,
+    // The original payload, not zod's output: zod drops every field outside
+    // the schema, and the full report (analysis, recording) is needed later.
+    raw: json.message,
   });
   if (error) {
     return NextResponse.json({ error: "Could not save" }, { status: 500 });
