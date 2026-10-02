@@ -48,14 +48,14 @@ with `python3` + `json.loads`.
 Next.js **16.3.5** (App Router, Turbopack) · React **19.2.8** · TypeScript strict · Tailwind CSS **v4**
 (CSS-first `@theme inline` in `app/globals.css` — **there is no `tailwind.config.ts`**).
 
-> **Current status and open items live in `PLAN.md`** (status section at the top). This file
+> **Current status and open items live in `PLAN.md`.** This file
 > explains how things work; that file tracks what's left.
 
 Dependencies: `@supabase/supabase-js`, `@vapi-ai/web`, `resend` (dynamic import, only loads if an
 email actually sends), `zod`.
 
-> ### ⚠️ Read `AGENTS.md` before writing any code
-> The repo's `AGENTS.md` says: *"This is NOT the Next.js you know. Read the relevant guide in
+> ### ⚠️ Read the shipped Next.js docs before writing any code
+> `next dev` writes an `AGENTS.md` (gitignored; it's generated) that says: *"This is NOT the Next.js you know. Read the relevant guide in
 > `node_modules/next/dist/docs/` before writing any code."* This is not boilerplate — following it
 > caught real errors, e.g. this version's error boundaries take a **`retry`** prop, not the `reset`
 > prop that older Next.js (and most training data) would assume. **Always check the shipped docs in
@@ -353,7 +353,7 @@ Claude never handles passwords or account credentials; Neil signs up himself and
    obvious the instant something was clicked, typed into, or measured in the browser.
 3. **Confirm non-trivial removals with Neil before acting.** He's explicitly asked for this — he wants
    the patient-facing flow simple and uncrowded, but wants to approve what goes.
-4. **Log findings in the plan file as they're found.**
+4. **Log open items in `PLAN.md`; the history goes in commit messages.**
 
 ### Standing verification, after any meaningful change
 ```bash
@@ -370,7 +370,7 @@ npx tsc --noEmit && npx eslint . && npm test && rm -rf .next && npm run build
   outside: every page, every internal link, headers, 404s, and that both APIs refuse bad input.
   **Never writes to the database**, so it's safe to run against production after every deploy.
 - Not automated: the voice call itself (needs a real mic) and the browser-side call lifecycle. Those
-  were verified by driving the real component with faked SDK events; see PLAN.md.
+  were verified by driving the real component with faked SDK events (see git history up to `65bec37`).
 
 ### Environment gotchas
 - **This network blocks non-standard outbound ports.** Confirmed twice: SSH :22 (worked around by

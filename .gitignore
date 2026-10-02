@@ -40,3 +40,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# AI-assistant tooling: local only (next dev regenerates AGENTS.md/CLAUDE.md)
+/.claude/
+/AGENTS.md
+/CLAUDE.md
