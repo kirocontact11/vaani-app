@@ -12,8 +12,8 @@ const SECRET = process.env.VAPI_WEBHOOK_SECRET;
 const skip = !BASE && "set BASE_URL to run smoke tests";
 const get = (path: string, init?: RequestInit) => fetch(BASE + path, { redirect: "manual", ...init });
 // Each run gets its own made-up IP. Locally that keeps the form rate limit
-// (5 per 10 min) from carrying over between runs; Vercel ignores it and uses
-// the real IP, so a 429 there just means the limiter is working.
+// (5 per 10 min) from carrying over between runs. On the live site the limit
+// follows the real IP instead, so a 429 there just means the limiter works.
 const fakeIp = `203.0.113.${Math.floor(Math.random() * 250) + 1}`;
 const post = (path: string, body: string, headers: Record<string, string> = {}) =>
   get(path, { method: "POST", body, headers: { "Content-Type": "application/json", "X-Forwarded-For": fakeIp, ...headers } });
@@ -83,6 +83,24 @@ test("form API refuses bad input without saving anything", { skip }, async () =>
   ]) {
     assert.ok([400, 429].includes((await post("/api/submit", body)).status), label);
   }
+});
+
+const EXPECT_SITE_URL = process.env.EXPECT_SITE_URL?.replace(/\/$/, "");
+test("the site advertises its own address in robots.txt (set EXPECT_SITE_URL)", { skip: skip || (!EXPECT_SITE_URL && "set EXPECT_SITE_URL to run") }, async () => {
+  const robots = await (await get("/robots.txt")).text();
+  assert.ok(robots.includes(`Sitemap: ${EXPECT_SITE_URL}/sitemap.xml`), robots);
+  assert.ok(!(await (await get("/")).text()).includes("kirohelp.com"), "old domain still shown on the home page");
+});
+
+const onLiveHost = BASE && !/^(localhost|127\.0\.0\.1)$/.test(new URL(BASE).hostname);
+test("the form limit can't be dodged with a faked X-Forwarded-For (live host only)", { skip: skip || (!onLiveHost && "only meaningful on a deployed host") }, async () => {
+  // 8 requests, each claiming a different IP. If the server trusted that
+  // header, every one would get a fresh allowance and none would be refused.
+  const statuses: number[] = [];
+  for (let i = 0; i < 8; i++) {
+    statuses.push((await get("/api/submit", { method: "POST", body: '{"kind":"x"}', headers: { "Content-Type": "application/json", "X-Forwarded-For": `198.51.100.${i + 1}` } })).status);
+  }
+  assert.ok(statuses.includes(429), `no request was rate-limited: ${statuses}`);
 });
 
 test("webhook rejects anyone without the secret", { skip }, async () => {

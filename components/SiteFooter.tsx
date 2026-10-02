@@ -25,7 +25,7 @@ export default function SiteFooter() {
         <a href="mailto:kiro.contact11@gmail.com?subject=Privacy">Privacy</a>
       </div>
       <div className="mt-2 text-[13.5px] text-muted">
-        © 2026 KIRO · Keep It Real Online India, New Delhi · kirohelp.com
+        © 2026 KIRO · Keep It Real Online India, New Delhi · mykiro.live
       </div>
     </footer>
   );

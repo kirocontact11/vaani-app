@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { clientIp } from "@/lib/client-ip";
 import { submitSchema } from "@/lib/validation";
 
 // ponytail: in-memory sliding window, per server instance — resets on cold
@@ -22,10 +23,7 @@ function isRateLimited(ip: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  // Trustworthy on Vercel only: it overwrites any client-sent X-Forwarded-For
-  // to prevent spoofing. Behind any other host this header can be faked.
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (isRateLimited(ip)) {
+  if (isRateLimited(clientIp(req.headers))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
