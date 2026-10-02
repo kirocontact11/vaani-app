@@ -29,14 +29,16 @@ npx tsc --noEmit && npx eslint . && npm test && npm run build
 Never writes to the database, so it's safe against the live site after every deploy:
 
 ```bash
-BASE_URL=https://<site> VAPI_WEBHOOK_SECRET=<secret> npm run test:smoke
+BASE_URL=https://mykiro.live EXPECT_SITE_URL=https://mykiro.live \
+  VAPI_WEBHOOK_SECRET=<secret> NEXT_PUBLIC_VAPI_PUBLIC_KEY=<key> npm run test:smoke
 ```
 
 ## Deploying
 
-Vercel (account **kiro.contact11@gmail.com**) builds from GitHub `kirocontact11/vaani-app` on every
-push to `main`. Required settings: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-`NEXT_PUBLIC_VAPI_PUBLIC_KEY`, `VAPI_WEBHOOK_SECRET`. Plus `NEXT_PUBLIC_SITE_URL` while the site
-isn't on `kirohelp.com` yet. The full checklist and post-deploy tasks are in `PLAN.md`.
+Render (a **Web Service**, not a Static Site; the forms and webhook need a server) rebuilds from
+GitHub `kirocontact11/vaani-app` on every push to `main`. Settings: build `npm ci && npm run build`,
+start `npm start`, `NODE_VERSION=22`. Required environment variables: `NEXT_PUBLIC_SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_VAPI_PUBLIC_KEY`, `VAPI_WEBHOOK_SECRET`. The site lives at
+**https://mykiro.live** (domain on GoDaddy). The checklist and remaining tasks are in `PLAN.md`.
 
 Database changes live in `supabase/migrations/` and are run by hand in the Supabase SQL Editor, in order.

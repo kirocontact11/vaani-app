@@ -7,10 +7,9 @@ Before any change: `npx tsc --noEmit && npx eslint . && npm test && npm run buil
 
 ## Before you deploy (must be done first)
 
-1. Supabase SQL Editor: run `supabase/migrations/0004_experts_phone_optional.sql`, then
-   `0005_drop_anon_insert.sql`. Live check 2026-10-02: **neither has run yet.** Until 0004 runs,
-   email-only registrations fail; until 0005 runs, anyone with the anon key can write straight into
-   `experts`/`appointments`.
+1. ✅ **Done 2026-10-02**, migrations 0004 and 0005, verified live: email-only registrations save; a
+   row with neither phone nor email is refused by the database; direct writes with the anon key are
+   refused on both tables; website forms still save.
 2. Supabase → Authentication → Sign In / Providers → turn **off** "Allow new users to sign up"
    (still on).
 3. Vercel, signed in as **kiro.contact11@gmail.com** via "Continue with GitHub" (the

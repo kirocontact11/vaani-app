@@ -34,7 +34,8 @@ retention purge, and why call transcripts are locked down harder than anything e
 | **GitHub** | `github.com/kirocontact11/vaani-app` (private, project account **kiro.contact11@gmail.com**, moved 2026-09-27) |
 | **Supabase** | Project `KIRO`, ref `tohbwflygqqqnhifvphw`, region Mumbai `ap-south-1` (org owned by **kiro.contact11@gmail.com**, moved 2026-09-27; same URL and keys) |
 | **Vapi assistant** | "Keep It Real Parent Intake", id `ca7dccb0-96c6-4c0d-bacf-69322ac70096` (**client's own account**) |
-| **Production domain** | `kirohelp.com` (confirmed 2026-09-18) |
+| **Hosting** | Render **Web Service** (not a Static Site: the forms and webhook are API routes), https://vaani-app-v8em.onrender.com. Redeploys from GitHub `main` on every push (~80 s). Build `npm ci && npm run build`, start `npm start`, `NODE_VERSION=22`. Sits behind Cloudflare. |
+| **Production domain** | `mykiro.live`, bought on GoDaddy. DNS: `A @ → 216.24.57.1`, `CNAME www → vaani-app-v8em.onrender.com`, no AAAA. Render redirects `www` and `http` to `https://mykiro.live` and issues the certificate. Verified 2026-10-02. |
 | **Secrets** | `.env.local` in the app dir — gitignored, never committed |
 
 **Decoding the design file**: `KIRO Site - Final.html` is a compiled bundle, not readable HTML. The
@@ -117,6 +118,7 @@ components/
 
 lib/
   site.ts                 SITE_URL constant (everything SEO reads from this one place)
+  client-ip.ts            visitor IP for the form rate limit: CF-Connecting-IP first, X-Forwarded-For fallback
   vapi.ts                 VAPI_ASSISTANT_ID + classifyCallError() (which SDK errors end a call)
   validation.ts           zod rules for /api/submit and the Vapi webhook (one source for tests too)
   supabase/server.ts      supabaseAdmin() — service-role, server-only
@@ -128,7 +130,7 @@ tests/                    node --test, zero extra dependencies (see §12)
   smoke.test.ts           checks a RUNNING site from outside, never writes (`npm run test:smoke`)
 
 supabase/migrations/      0001_init.sql, 0002_drop_redundant_person_column.sql, 0003_calls.sql,
-                          0004_experts_phone_optional.sql, 0005_drop_anon_insert.sql (both NOT YET RUN, see PLAN.md)
+                          0004_experts_phone_optional.sql, 0005_drop_anon_insert.sql (all 5 run, last two on 2026-10-02)
 ```
 
 **23 routes total.** `npx tsc --noEmit && npx eslint . && npm test && npm run build` is clean.
@@ -137,18 +139,13 @@ supabase/migrations/      0001_init.sql, 0002_drop_redundant_person_column.sql, 
 
 ## 6. Database (Supabase Postgres)
 
-Three tables. Migrations 0001–0003 have been run in the Supabase SQL Editor, and live schemas were
-verified column-by-column against the migration files — no drift. **0004 and 0005 are written but
-not yet run** (checked live 2026-10-02):
-- **0004** makes `experts.phone` optional and requires phone *or* email. Until it runs, email-only
-  registrations fail.
-- **0005** drops the two anon-insert policies. Until it runs, anyone holding the anon key can write
-  straight into `experts`/`appointments` (proven, test rows deleted).
+Three tables. All 5 migrations have been run in the Supabase SQL Editor (0004 and 0005 on
+2026-10-02), each verified against the live database.
 
 | Table | Source | RLS |
 |---|---|---|
-| `experts` (21 cols) | `/register`, both tabs, discriminated by `kind` (`psych`/`cdc`) | anon insert only *until 0005*, then **zero policies** |
-| `appointments` (9 cols) | `/book` | anon insert only *until 0005*, then **zero policies** |
+| `experts` (21 cols) | `/register`, both tabs, discriminated by `kind` (`psych`/`cdc`) | **zero policies**: no anon access at all |
+| `appointments` (9 cols) | `/book` | **zero policies**: no anon access at all |
 | `calls` (6 cols) | Vapi webhook | **RLS on, zero policies** — not even anon insert |
 
 **The RLS model, and why**: the anon key ships inside the browser bundle by definition, so it must
@@ -157,7 +154,7 @@ RLS. `calls` is stricter still — nothing client-side should ever touch call tr
 
 **Verification that this actually works** (re-run this after deploy):
 anon `select` on each table returns `200` with `[]` (not an error); anon `insert` on `calls` is
-rejected, and on `experts`/`appointments` too once 0005 has run.
+rejected, and on `experts`/`appointments` too.
 
 **Retention**: 12-month purge on `experts` and `appointments` via `pg_cron`, daily at 03:00 UTC.
 Client-confirmed policy. Note `calls` has **no** purge yet — worth raising.
@@ -238,7 +235,7 @@ All live in `.env.local` (gitignored). `.env.example` documents every name with 
 | `VAPI_WEBHOOK_SECRET` | shared secret, generated with `openssl rand -hex 32` | yes |
 | `RESEND_API_KEY` | email notify — **app works fine without it**, just skips email | optional |
 | `NOTIFY_EMAIL` | where notifications go | optional |
-| `NEXT_PUBLIC_SITE_URL` | overrides `kirohelp.com` default | optional |
+| `NEXT_PUBLIC_SITE_URL` | overrides the `https://mykiro.live` default; read at **build** time | optional |
 
 ---
 
@@ -254,6 +251,7 @@ These are worth knowing because the same classes of bug keep recurring on this p
 | `submitForm()` didn't await its own POST | Harmless while the only destination was `mailto:` (can't fail); a real bug the moment a backend that can 400/500 existed — every form showed fake success. |
 | Stale validation errors across all 4 forms | Invisible in code review, obvious on the first live keystroke. |
 | 3 chat UI elements looked real but were never wired | Carried over from the Claude Design mockup, which was a *static visual prototype* — its "inputs" were always styled `<div>`s. Correct then, confusing once the rest became real. All 3 removed/wired after confirming with Neil. |
+| Form rate limit bypassable on Render (found 2026-10-02) | The limiter keyed on the first `X-Forwarded-For` entry, which the visitor controls. Vercel overwrites it; **Render does not** (8 faked IPs all got through). Now keyed on Cloudflare's `CF-Connecting-IP`, and Cloudflare itself refuses (403) a visitor-supplied one. **Any host change means re-testing this.** |
 | Anchor nav landed headings behind the sticky bar | No `scroll-margin-top` existed anywhere. Now `scroll-mt-[90px] sm:scroll-mt-[130px]` on all 5 Home sections. |
 | 6 internal links used raw `<a>` | ESLint's `no-html-link-for-pages` only fires once the target route *exists* — previously "clean" files sprout errors retroactively as later routes get built. |
 | Hero pulse rings looked static | First fix (3 rings, higher alpha) didn't reach the root cause. Real cause (found 2026-09-23): our `@keyframes pulse` shared its name with Tailwind's built-in `animate-pulse` keyframes, and Tailwind's (fade-only) replaced ours in the compiled CSS. Renamed to `ring-pulse`. **Same lesson as `text-base`: never reuse a Tailwind built-in name — for colors *or* keyframes.** |
@@ -275,10 +273,10 @@ These are worth knowing because the same classes of bug keep recurring on this p
 | C4 | Wire forms to Supabase + email | ✅ done — email dormant until `RESEND_API_KEY` exists |
 | C5 | Vapi voice widget | ✅ built + verified **except a real spoken call** |
 | C6 | Vaani system prompt | ✅ effectively done — client's own assistant covers it |
-| C7 | Vapi webhook + call logging | ✅ built + verified against the route — **dashboard config & live call pending** |
+| C7 | Vapi webhook + call logging | ✅ built + verified end to end through `mykiro.live` — **Vapi dashboard config & a real call pending** |
 | C8 | Video/topic polish | ✅ done — all 11 video IDs confirmed live and on-topic |
 | C9 | SEO: robots/sitemap/JSON-LD/OG image/icons/manifest | ✅ done, verified |
-| **C10** | **Deploy to Vercel + real domain** | 🔴 **IN PROGRESS — this is the current task** |
+| C10 | Deploy + real domain | ✅ Render + `mykiro.live` live, tested 2026-10-02 |
 | C11 | Pre-demo rehearsal on production, on a real phone | ⬜ last |
 
 Also done outside the C-numbering: real branding icons (favicon was still the default Next.js one
@@ -293,26 +291,13 @@ NOT the `microphone=()` in Next's own docs example** — copying the docs verbat
 
 ## 11. What's actually left
 
-### 🔴 C10 — Deploy to Vercel (current task, in progress)
-Neil chose this path on 2026-09-22 to unblock everything Vapi-related at once.
-1. Sign in to Vercel as **kiro.contact11@gmail.com** ("Continue with GitHub" → the `kirocontact11` account) → import `kirocontact11/vaani-app`. Note: `vaani-app.vercel.app` is already taken by an unrelated site, so Vercel will assign a different address.
-2. Add the 5 required env vars from §8 in Vercel's dashboard — **never in the repo**.
-3. Deploy, confirm HTTPS.
-4. Point `kirohelp.com` at Vercel (needs registrar/DNS access — unknown where DNS is hosted; **ask Neil**).
-5. Re-run the RLS verification (§6) against production.
+**The live checklist is in `PLAN.md`.** The durable notes behind it:
 
-*Account creation and OAuth authorization are Neil's to do — per a standing rule on this project,
-Claude never handles passwords or account credentials; Neil signs up himself and pastes only keys.*
-
-### 🟡 Unblocked the moment C10 lands
-- **Vapi dashboard config**: set the assistant's **Server URL** to
-  `https://<domain>/api/webhooks/vapi`, attach a credential (header `Authorization`, Bearer prefix on,
-  value = `VAPI_WEBHOOK_SECRET`). Then make a real call and confirm a row lands in `calls`.
-- **A real spoken conversation on `/talk/voice`** — never done. This sandbox has no microphone, and
-  `getUserMedia` requires a secure context (HTTPS or literally `localhost`), so LAN-IP testing over
-  plain HTTP **cannot** work. Neil hit a persistent "Microphone access was denied" on his own machine;
-  the next diagnostic step was an **Incognito window** (zero permission history → prompt guaranteed to
-  appear). That result was never reported back.
+- **A real spoken conversation on `/talk/voice` has never been done** — this sandbox has no
+  microphone, and `getUserMedia` needs HTTPS or literally `localhost`. Do it in regular Chrome (the
+  Claude app's browser pane blocks the mic outright).
+- **Vapi dashboard**: set the assistant's **Server URL** to `https://mykiro.live/api/webhooks/vapi`
+  with a Bearer credential = `VAPI_WEBHOOK_SECRET`. The route is already proven through that domain.
 - **Content-Security-Policy** — deliberately not written yet. Needs the exact Supabase/Vapi/Daily
   connect-src domains enumerated against a live voice call; guessing risked a silent break.
 
@@ -327,9 +312,9 @@ Claude never handles passwords or account credentials; Neil signs up himself and
 - `lib/content/videos.ts:73` — final sign-off on one video ID (verified live and on-topic, but the
   client's call whether they meant a different one).
 
-### 🟡 Account ownership — do before/at deploy, not after
-- **GitHub repo** → transfer from Neil's personal account to the client (or a dedicated org).
-- **Supabase project** → same.
+### ✅ Account ownership
+GitHub and Supabase are under **kiro.contact11@gmail.com**. Vapi stays on the client's account. The
+domain is on GoDaddy; confirm whose account holds it at handover.
 
 ### ⚪ Deferred decisions (cost nothing to wait)
 - **Who reads form submissions, how fast.** Today's default: check Supabase's table view manually.
