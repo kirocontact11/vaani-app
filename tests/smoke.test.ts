@@ -2,7 +2,7 @@
 // headers, and that both APIs refuse bad input. It never writes to the
 // database, so it's safe to point at production.
 //   BASE_URL=http://localhost:3000 npm run test:smoke
-//   BASE_URL=https://<your-site> VAPI_WEBHOOK_SECRET=<secret> npm run test:smoke
+//   BASE_URL=https://<your-site> VAPI_WEBHOOK_SECRET=<secret> NEXT_PUBLIC_VAPI_PUBLIC_KEY=<key> npm run test:smoke
 // Skipped entirely when BASE_URL isn't set (e.g. plain `npm test`).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -90,6 +90,16 @@ test("webhook rejects anyone without the secret", { skip }, async () => {
   assert.equal((await post("/api/webhooks/vapi", "{}")).status, 401, "no auth");
   assert.equal((await post("/api/webhooks/vapi", "{}", { Authorization: "Bearer wrong" })).status, 401, "wrong secret");
   assert.equal((await post("/api/webhooks/vapi", "{}", { "X-Vapi-Secret": "wrong" })).status, 401, "wrong legacy secret");
+});
+
+test("the voice page was built with the Vapi public key (else voice shows 'not available')", {
+  skip: skip || (!process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY && "set NEXT_PUBLIC_VAPI_PUBLIC_KEY to run"),
+}, async () => {
+  const html = await (await get("/talk/voice")).text();
+  const scripts = [...html.matchAll(/src="(\/_next\/static\/[^"]+\.js)"/g)].map((m) => m[1]);
+  assert.ok(scripts.length > 0, "page loads scripts");
+  const bundles = await Promise.all(scripts.map(async (src) => (await get(src)).text()));
+  assert.ok(bundles.some((js) => js.includes(process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY!)), "key not found in /talk/voice's scripts");
 });
 
 test("webhook accepts the real secret (ignored message type: nothing saved)", { skip: skip || (!SECRET && "set VAPI_WEBHOOK_SECRET to run") }, async () => {

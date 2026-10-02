@@ -188,6 +188,16 @@ prompt lives in the client's Vapi dashboard, not in this repo.
 - **`camera-error` is the non-obvious one**: despite the name (it's Daily's naming, which Vapi wraps),
   that's the event that fires for microphone/device failures. It now stops the call.
 - "Connecting…" times out after 30 s with a message; a double tap on Allow can't start two calls.
+- **Each tap is a numbered attempt**; Cancel, restart, leaving the page and newer taps invalidate
+  older ones. The SDK runs one call at a time and its `start()` can't be aborted, so a new attempt
+  waits for a cancelled `start()` to finish (and be stopped) before calling `start()`. The phase
+  stays `idle` meanwhile, so the old call's teardown events are ignored.
+- **`call-end` is only acted on for a live call.** Other endings are handled by their cause, and
+  `stop()` can fire `call-end` while tearing down an old call.
+- `ejected` means "Vaani hung up" only once live; before that, it means Vapi couldn't start the
+  assistant, which is shown as a failure.
+- `@vapi-ai/web` is pinned to exactly **2.7.0**, because the logic above follows that version's
+  source. Re-check it before upgrading.
 - All of the above found by reading `node_modules/@vapi-ai/web/dist/vapi.js` directly.
 - Before `vapi.start()`, the code calls `navigator.mediaDevices.getUserMedia({ audio: true })`
   **directly** — the standard way to trigger the browser's real permission prompt — and maps each

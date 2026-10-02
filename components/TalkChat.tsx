@@ -12,9 +12,13 @@ import {
   type InitialChatState,
   type Msg,
 } from "@/lib/content/chat-flow";
-import { CONNECT_TIMEOUT_MS, VAPI_ASSISTANT_ID, classifyCallError, type VapiErrorEvent } from "@/lib/vapi";
-
-type CallPhase = "idle" | "connecting" | "live";
+import {
+  CONNECT_TIMEOUT_MS,
+  VAPI_ASSISTANT_ID,
+  classifyCallError,
+  type CallPhase,
+  type VapiErrorEvent,
+} from "@/lib/vapi";
 
 // Opens the user's own email client with the conversation so far, pre-filled
 // as the body — no backend, no email capture needed. They address it to
@@ -43,10 +47,17 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
   // what the user asked for; `mic` state only drives what's on screen.
   const callPhaseRef = useRef<CallPhase>("idle");
   const connectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Each tap on Allow / Try again is a numbered attempt; Cancel, restart,
+  // leaving the page and any newer tap invalidate older ones.
+  const attemptRef = useRef(0);
+  // The SDK runs one call at a time and its start() can't be aborted, so a
+  // cancelled start() must finish (and be stopped) before a new one begins.
+  const pendingStartRef = useRef<Promise<void> | null>(null);
 
   const set = (patch: Partial<ChatState>) => setState((s) => ({ ...s, ...patch }));
 
   const stopCall = () => {
+    attemptRef.current++;
     callPhaseRef.current = "idle";
     if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
     connectTimerRef.current = null;
@@ -94,17 +105,19 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
         vapi.stop().catch(() => {});
         return;
       }
-      if (process.env.NODE_ENV !== "production") console.timeEnd("[vaani] click → listening");
+      if (process.env.NODE_ENV !== "production") console.timeEnd(`[vaani] attempt ${attemptRef.current}: click → listening`);
       callPhaseRef.current = "live";
       clearConnectTimer();
       setMicError("");
       setState((s) => ({ ...s, mic: "live" }));
     });
     vapi.on("call-end", () => {
-      // A real failure while connecting always arrives as a fatal `error`
-      // first (which sets the phase to idle), so an end event now is left over
-      // from tearing down a previous call.
-      if (callPhaseRef.current === "connecting") return;
+      // Only a live call ending needs handling here. Every other end is
+      // already handled by its cause (Stop, a fatal error, the timeout), and
+      // stop() can fire call-end as it tears down a previous call — so an end
+      // event while idle or connecting must not touch the screen (it could be
+      // a cancelled call's teardown while a new one is starting).
+      if (callPhaseRef.current !== "live") return;
       callPhaseRef.current = "idle";
       clearConnectTimer();
       setAssistantSpeaking(false);
@@ -119,7 +132,7 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
     vapi.on("local-volume-level", (level) => setLocalAudioLevel(level));
     vapi.on("error", (err: VapiErrorEvent) => {
       if (callPhaseRef.current === "idle") return;
-      const outcome = classifyCallError(err);
+      const outcome = classifyCallError(err, callPhaseRef.current);
       if (outcome.kind === "non-fatal") {
         console.warn("[vaani] non-fatal call error, call continues:", err);
         return;
@@ -142,7 +155,8 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
     });
 
     return () => {
-      // start() may still be running; startCall stops it once it returns.
+      // start() may still be running; startCall sees vapiRef change and
+      // stops it once it returns.
       callPhaseRef.current = "idle";
       clearConnectTimer();
       vapi.stop().catch(() => {});
@@ -158,23 +172,29 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
       set({ mic: "error" });
       return;
     }
-    // Already connecting or live — e.g. a double tap on Allow.
-    if (callPhaseRef.current !== "idle") return;
-    callPhaseRef.current = "connecting";
+    if (callPhaseRef.current !== "idle") return; // already connecting or live
+    // Stale once a newer tap (e.g. a double tap), Cancel or restart bumps the
+    // attempt, or the page unmounts (which clears vapiRef).
+    const attempt = ++attemptRef.current;
+    const current = () => attemptRef.current === attempt && vapiRef.current === vapi;
     setMicError("");
     set({ mic: "connecting" });
-    if (process.env.NODE_ENV !== "production") console.time("[vaani] click → listening");
+    if (process.env.NODE_ENV !== "production") console.time(`[vaani] attempt ${attempt}: click → listening`);
 
     // Request the mic directly via the standard browser API before handing
     // off to Vapi/Daily. This is the most reliable way to actually trigger
     // the browser's permission prompt, and it gives the real underlying
     // reason (denied / no device / in use elsewhere / insecure page) instead
-    // of Vapi's one generic message for every failure mode.
+    // of Vapi's one generic message for every failure mode. The phase stays
+    // "idle" until start() is called, so stray events from an older call are
+    // ignored meanwhile.
     try {
+      // Missing entirely on insecure (plain-HTTP, non-localhost) pages.
+      if (!navigator.mediaDevices?.getUserMedia) throw new DOMException("No mediaDevices", "SecurityError");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((t) => t.stop()); // Daily opens its own.
     } catch (err) {
-      if (callPhaseRef.current !== "connecting") return; // cancelled meanwhile
+      if (!current()) return; // cancelled or superseded meanwhile
       const name = err instanceof DOMException ? err.name : "";
       // Chrome uses the same NotAllowedError for an OS-level block; only the message differs.
       const systemBlocked = err instanceof Error && /by system/i.test(err.message);
@@ -190,34 +210,41 @@ export default function TalkChat({ initial }: { initial: InitialChatState }) {
               : name === "SecurityError"
                 ? "This page must be loaded over HTTPS (or localhost) to use the microphone."
                 : `Couldn't access the microphone (${name || "unknown error"}).`;
-      callPhaseRef.current = "idle";
       setMicError(message);
       set({ mic: "error" });
       return;
     }
-    // Cancelled while the browser's permission prompt was open.
-    if (callPhaseRef.current !== "connecting") return;
+    if (!current()) return; // cancelled while the permission prompt was open
 
+    // Let a cancelled start() finish and be stopped first.
+    if (pendingStartRef.current) await pendingStartRef.current;
+    if (!current()) return;
+
+    callPhaseRef.current = "connecting";
     // start() can hang or return null without any error event; don't leave
     // the parent watching "Connecting…" forever.
     if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
     connectTimerRef.current = setTimeout(() => {
       connectTimerRef.current = null;
-      if (callPhaseRef.current !== "connecting") return;
+      if (!current() || callPhaseRef.current !== "connecting") return;
       callPhaseRef.current = "idle";
       vapi.stop().catch(() => {});
       setMicError("Vaani is taking too long to answer. Please try again in a moment.");
       set({ mic: "error" });
     }, CONNECT_TIMEOUT_MS);
 
-    try {
-      await vapi.start(VAPI_ASSISTANT_ID);
-    } catch {
+    const pending = vapi
+      .start(VAPI_ASSISTANT_ID)
       // Only input validation throws, and it also emits a fatal `error` event.
-    }
-    // Cancelled, restarted or unmounted while start() was still setting up.
-    // (Cast: TS narrows the ref above and can't see the await changing it.)
-    if ((callPhaseRef.current as CallPhase) === "idle") vapi.stop().catch(() => {});
+      .catch(() => null)
+      .then(async () => {
+        // Cancelled, superseded, failed or unmounted while start() was still
+        // setting up: start() doesn't abort on its own, so tear the call down.
+        if (!current() || callPhaseRef.current === "idle") await vapi.stop().catch(() => {});
+      });
+    pendingStartRef.current = pending;
+    await pending;
+    if (pendingStartRef.current === pending) pendingStartRef.current = null;
   };
 
   const k = state.topic ? KB[state.topic] : null;

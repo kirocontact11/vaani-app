@@ -20,19 +20,25 @@ test("non-critical SDK errors don't end the call", () => {
     "video-recording-setup-error",
     "something-new-from-a-future-sdk",
   ]) {
-    assert.deepEqual(classifyCallError({ type }), { kind: "non-fatal" }, type);
+    assert.deepEqual(classifyCallError({ type }, "live"), { kind: "non-fatal" }, type);
   }
-  assert.deepEqual(classifyCallError(null), { kind: "non-fatal" });
-  assert.deepEqual(classifyCallError(undefined), { kind: "non-fatal" });
-  assert.deepEqual(classifyCallError({}), { kind: "non-fatal" });
+  assert.deepEqual(classifyCallError(null, "live"), { kind: "non-fatal" });
+  assert.deepEqual(classifyCallError(undefined, "connecting"), { kind: "non-fatal" });
+  assert.deepEqual(classifyCallError({}, "live"), { kind: "non-fatal" });
 });
 
-test("Vaani hanging up (Daily 'ejected') is a normal end, not a failure", () => {
-  assert.deepEqual(classifyCallError(daily("ejected")), { kind: "ended" });
+test("Vaani hanging up (Daily 'ejected') during a live call is a normal end, not a failure", () => {
+  assert.deepEqual(classifyCallError(daily("ejected"), "live"), { kind: "ended" });
+});
+
+test("'ejected' before the call is live means Vapi couldn't start Vaani: a failure, not a silent vanish", () => {
+  const r = classifyCallError(daily("ejected"), "connecting");
+  assert.equal(r.kind, "failed");
+  assert.match(r.kind === "failed" ? r.message : "", /^Couldn't reach Vaani right now\./);
 });
 
 test("a dropped connection gets its own plain-language message", () => {
-  const r = classifyCallError(daily("connection-error"));
+  const r = classifyCallError(daily("connection-error"), "live");
   assert.equal(r.kind, "failed");
   assert.match(r.kind === "failed" ? r.message : "", /connection dropped/);
 });
@@ -47,7 +53,7 @@ test("every other fatal error fails with a friendly message, never raw SDK text"
     daily("meeting-full"),
     daily("exp-room"),
   ]) {
-    const r = classifyCallError(e);
+    const r = classifyCallError(e, "connecting");
     assert.equal(r.kind, "failed", e.type);
     const msg = r.kind === "failed" ? r.message : "";
     assert.match(msg, /^Couldn't reach Vaani right now\./, e.type);

@@ -3,6 +3,35 @@
 *Written 2026-09-23. On approval this is saved as `vaani-app/PLAN.md`. Everything non-Vapi (domain,
 CSP, content TODOs, ownership transfer, phone rehearsal) is parked at the bottom and comes after.*
 
+## Vapi architecture re-audit (2026-10-02, before pushing)
+
+Fresh pass against the SDK source, with a more realistic test harness. Found and fixed:
+
+| # | Flaw | Fix | Verified |
+|---|---|---|---|
+| 1 | **Cancel then Allow again while the cancelled `start()` was still running broke the new call.** The SDK runs one call at a time, and the cancelled start's teardown errors (`daily-call-join-error`) arrived while the new attempt was "connecting", killing it. | Each tap is a numbered attempt. A new attempt waits for any cancelled `start()` to finish and be stopped before calling `start()`, and the phase stays `idle` meanwhile, so old events are ignored. | Old errors ignored, old call stopped, new call goes live ✅ |
+| 2 | **Vapi failing to start the assistant made the panel silently vanish.** The room deletion arrives as Daily `ejected`, which was always treated as a normal hang-up. | `ejected` is a normal end only once the call is live; before that, it shows "Couldn't reach Vaani". | Unit test + browser ✅ |
+| 3 | **Insecure page → "unknown error".** `navigator.mediaDevices` doesn't exist on plain HTTP. | Gives the real reason: HTTPS needed. | Browser ✅ |
+| 4 | **A `call-end` from a cancelled call's teardown could reset the screen while a new call was connecting** (found in my own fix for #1: the old harness's fake `stop()` didn't fire `call-end` the way the real SDK does) | `call-end` only acts on a live call; every other ending is handled by its cause | With a realistic `stop()`: the screen held "Connecting…" for all 12 samples ✅ |
+| 5 | **`@vapi-ai/web` was `^2.7.0`.** The error handling is written against 2.7's internals, so a silent upgrade could change event types. | Pinned to exactly `2.7.0` | `package.json` ✅ |
+| 6 | **A deploy missing the Vapi public key** would show "Voice isn't available" to everyone, and no test noticed | The smoke test checks the key is in `/talk/voice`'s scripts | Passes with the real key, fails with a wrong one ✅ |
+
+All earlier scenarios re-run with the realistic harness and pass: Stop, Vaani hangs up, a plain end
+while live, cancel races, cancel during the prompt, double tap, mic failure, network drop, non-fatal
+errors, failed start → Try again, leaving the page during the prompt or the start, and the 30 s
+timeout. Unit tests 27/27 (the new ejection test was proven to catch the old logic). Smoke 10/10.
+
+**Known limits, deliberately not built:**
+- The webhook's duplicate check is check-then-insert. Two copies of the same report arriving within
+  milliseconds could both be stored. Vapi doesn't document retries at all, and a sequential re-send
+  is handled, so I didn't add a unique index and a migration for that edge.
+- **Dashboard check, not code (post-deploy #3):** the Server URL is set on the client's assistant,
+  so it applies to *every* call that assistant handles. If the assistant has tools that rely on that
+  URL, their calls would reach our webhook, get `{ignored}` back, and the tools would fail. Calls
+  from other channels (e.g. a phone number) would also be logged in our table.
+
+---
+
 ## ▶ Current status (2026-10-02): tested, deployment-ready, post-deploy tasks
 
 ### Test suite (new): `npm test` + `npm run test:smoke`
@@ -12,9 +41,9 @@ There were no automated tests before this. Now (Node's built-in runner, no new d
 |---|---|---|
 | `tests/validation.test.ts` | Every form rule: required fields, phone-or-email, consent, length caps, junk, stripped extra fields, trimming; webhook payload shape | ✅ 10/10 |
 | `tests/chat-flow.test.ts` | All 4 "urgent" follow-ups escalate to 1098; ordinary ones don't; every follow-up value is renderable; every `/talk/<slug>` link resolves | ✅ 7/7, 1 todo (per-topic plan answers: client content) |
-| `tests/vapi.test.ts` | Which SDK errors end a call, normal hang-up vs failure, no raw SDK text shown | ✅ 4/4 |
+| `tests/vapi.test.ts` | Which SDK errors end a call, hang-up vs failure (live vs connecting), no raw SDK text shown | ✅ 5/5 |
 | `tests/content.test.ts` | Video IDs/links/thumbnails/durations, age filters, topic data | ✅ 5/5 |
-| `tests/smoke.test.ts` | A running site from outside: 21 pages, all internal links, 404s, headers, contact links, robots/sitemap, both APIs refuse bad input. **Never writes.** | ✅ 9/9 against a fresh production build |
+| `tests/smoke.test.ts` | A running site from outside: 21 pages, all internal links, 404s, headers, contact links, robots/sitemap, both APIs refuse bad input, Vapi public key present in the build. **Never writes.** | ✅ 10/10 against a fresh production build |
 
 **Do the tests actually catch bugs?** Five real bugs from earlier audits were re-introduced one at a
 time; each was caught by the test written for it, then restored.
@@ -56,7 +85,7 @@ everything above was re-run on the new version, and the share image was checked 
      canonical links would point at a dead site. This value is read at build time, so redeploy
      after changing it.
 5. Run the smoke test against the live address:
-   `BASE_URL=https://<address> VAPI_WEBHOOK_SECRET=<secret> npm run test:smoke`
+   `BASE_URL=https://<address> VAPI_WEBHOOK_SECRET=<secret> NEXT_PUBLIC_VAPI_PUBLIC_KEY=<key> npm run test:smoke`
 
 ### After deploy: every remaining task
 
@@ -64,7 +93,7 @@ everything above was re-run on the new version, and the share image was checked 
 |---|---|---|---|---|
 | 1 | Run the smoke test against the live site | Proves pages, headers and both APIs work in production | Claude | — |
 | 2 | Re-run the database attack checks on production (anon read → `[]`, anon insert → refused) | Confirms 0005 and RLS on the live setup | Claude | Supabase (kiro.contact11) |
-| 3 | Vapi dashboard: Server URL = `https://<address>/api/webhooks/vapi`, Bearer credential = `VAPI_WEBHOOK_SECRET`, server messages = only `end-of-call-report` | Without it, no call is ever logged | Neil, in the client's Vapi | Vapi (client's; kiro.contact11 not connected, per your choice) |
+| 3 | Vapi dashboard: Server URL = `https://<address>/api/webhooks/vapi`, Bearer credential = `VAPI_WEBHOOK_SECRET`, server messages = only `end-of-call-report`. **First check the assistant has no tools relying on its Server URL, and whether it also takes calls from other channels** (those would be logged too) | Without it, no call is ever logged; with the wrong setup, the client's tools break | Neil, in the client's Vapi | Vapi (client's; kiro.contact11 not connected, per your choice) |
 | 4 | One real call on the live `/talk/voice`; test hang-up, Vaani ending the call, and Cancel while connecting | The only part never tested with a real mic | Neil (Claude checks the `calls` row) | — |
 | 5 | Compare a real call's stored `raw` payload with what the code expects | Needed before topic/escalation tagging | Claude | Supabase |
 | 6 | Real-phone test: 1098 button dials, voice on mobile data, forms, WhatsApp share preview | Desktop can't test `tel:` or mobile mic | Neil | — |

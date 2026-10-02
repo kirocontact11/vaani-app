@@ -27,22 +27,24 @@ export interface VapiErrorEvent {
   error?: { message?: unknown; errorMsg?: unknown; error?: { type?: string } };
 }
 
+export type CallPhase = "idle" | "connecting" | "live";
+
 export type CallErrorOutcome =
   | { kind: "non-fatal" }
   | { kind: "ended" }
   | { kind: "failed"; message: string };
 
-export function classifyCallError(e: VapiErrorEvent | null | undefined): CallErrorOutcome {
+const COULD_NOT_REACH = "Couldn't reach Vaani right now. Please try again in a moment.";
+
+export function classifyCallError(e: VapiErrorEvent | null | undefined, phase: CallPhase): CallErrorOutcome {
   if (!FATAL_CALL_ERRORS.has(e?.type ?? "")) return { kind: "non-fatal" };
   const dailyType = e?.error?.error?.type;
-  // Vaani ending the call deletes the room, which Daily reports as an
-  // "ejected" error. That's a normal ending, not a failure.
-  if (dailyType === "ejected") return { kind: "ended" };
+  // Vapi ending a call deletes the room, which Daily reports as "ejected".
+  // Once live, that's Vaani hanging up: a normal end. Before the call is
+  // live, it means Vapi couldn't start the assistant: a failure.
+  if (dailyType === "ejected") return phase === "live" ? { kind: "ended" } : { kind: "failed", message: COULD_NOT_REACH };
   return {
     kind: "failed",
-    message:
-      dailyType === "connection-error"
-        ? "The connection dropped. Check your internet and try again."
-        : "Couldn't reach Vaani right now. Please try again in a moment.",
+    message: dailyType === "connection-error" ? "The connection dropped. Check your internet and try again." : COULD_NOT_REACH,
   };
 }
